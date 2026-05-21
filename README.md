@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/img/mtu.svg" width="80" height="80" alt="MTU logo" />
+  <img src="public/img/mtu.svg" width="200" height="200" alt="MTU logo" />
 </p>
 
 # MTU — Monitor de Uso de Tokens
