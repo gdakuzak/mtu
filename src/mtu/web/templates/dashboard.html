@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTU — Token Usage Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0f172a',
+            card: '#1e293b',
+            border: '#334155',
+            accent: '#6366f1',
+            muted: '#94a3b8',
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f172a; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+    .stat-value { font-variant-numeric: tabular-nums; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen font-mono">
+
+  <!-- Header -->
+  <header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36" fill="none">
+        <defs>
+          <linearGradient id="mtu-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#0A2540" />
+            <stop offset="50%" stop-color="#00D4B2" />
+            <stop offset="100%" stop-color="#0099FF" />
+          </linearGradient>
+        </defs>
+        <path d="M 25 75 A 38 38 0 1 1 85 40" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round"/>
+        <path d="M 22 45 A 28 28 0 0 1 45 22" stroke="#00D4B2" stroke-width="2" stroke-dasharray="4 4" opacity="0.6" stroke-linecap="round"/>
+        <circle cx="35" cy="25" r="2.5" fill="#0099FF" />
+        <rect x="36" y="52" width="6" height="22" rx="3" fill="#0A2540" />
+        <rect x="47" y="42" width="6" height="32" rx="3" fill="#00D4B2" />
+        <rect x="58" y="32" width="6" height="42" rx="3" fill="#0099FF" />
+        <path d="M 20 65 L 38 48 L 52 60 L 82 24" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        <polygon points="82,24 68,23 80,37" fill="#0099FF" />
+      </svg>
+      <span class="text-slate-500 text-sm">Monitor de Uso de Tokens</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="last-updated" class="text-slate-500 text-xs"></span>
+      <span id="auto-indicator" class="flex items-center gap-1 text-slate-600 text-xs">
+        <span id="auto-dot" class="inline-block w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+        <span id="auto-countdown">30s</span>
+      </span>
+      <button id="sync-btn" onclick="syncAndRefresh()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-md transition-colors">
+        ↻ Sincronizar
+      </button>
+    </div>
+  </header>
+
+  <main class="p-6 max-w-7xl mx-auto space-y-6">
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="card p-4">
+        <div class="text-slate-400 text-xs mb-1">Tokens hoje</div>
+        <div id="stat-today-tokens" class="stat-value text-2xl font-bold text-white">—</div>
+        <div id="stat-today-messages" class="text-slate-500 text-xs mt-1"></div>
+      </div>
+      <div class="card p-4">
+        <div class="text-slate-400 text-xs mb-1">Cache hit rate</div>
+        <div id="stat-cache-rate" class="stat-value text-2xl font-bold text-emerald-400">—</div>
+        <div class="text-slate-500 text-xs mt-1">lifetime</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-slate-400 text-xs mb-1">Custo estimado hoje</div>
+        <div id="stat-cost" class="stat-value text-2xl font-bold text-amber-400">—</div>
+        <div class="text-slate-500 text-xs mt-1">baseado em API pricing</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-slate-400 text-xs mb-1">Sessões hoje</div>
+        <div id="stat-sessions" class="stat-value text-2xl font-bold text-indigo-400">—</div>
+        <div id="stat-budget" class="text-slate-500 text-xs mt-1"></div>
+      </div>
+    </div>
+
+    <!-- Chart Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="card p-4 lg:col-span-2">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-300">Tokens por dia</h2>
+          <select id="days-select" onchange="loadDaily(this.value)"
+            class="bg-slate-700 border border-slate-600 text-slate-300 text-xs rounded px-2 py-1">
+            <option value="7">7 dias</option>
+            <option value="14" selected>14 dias</option>
+            <option value="30">30 dias</option>
+          </select>
+        </div>
+        <canvas id="daily-chart" height="120"></canvas>
+      </div>
+
+      <div class="card p-4">
+        <h2 class="text-sm font-semibold text-slate-300 mb-4">Cache stats (lifetime)</h2>
+        <div id="cache-stats" class="space-y-3 text-xs"></div>
+      </div>
+    </div>
+
+    <!-- Optimization Tips -->
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Sugestões de otimização</h2>
+      <div id="tips" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
+
+    <!-- Expensive Prompts -->
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-300">Prompts mais pesados</h2>
+        <span class="text-slate-500 text-xs">registrados via record_prompt</span>
+      </div>
+      <div id="expensive-prompts">
+        <p class="text-slate-500 text-xs text-center py-8">
+          Nenhum prompt registrado ainda.<br>
+          Use a ferramenta MCP <code class="text-indigo-400">record_prompt</code> para rastrear.
+        </p>
+      </div>
+    </div>
+
+    <!-- Project Breakdown -->
+    <div class="card p-4">
+      <h2 class="text-sm font-semibold text-slate-300 mb-3">Por projeto (30 dias)</h2>
+      <div id="project-breakdown">
+        <p class="text-slate-500 text-xs text-center py-4">Sem dados por projeto ainda.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    let dailyChart = null;
+
+    function fmtTokens(n) {
+      if (!n) return '0';
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    function fmtCost(usd) {
+      if (!usd) return '$0.00';
+      return '$' + usd.toFixed(4);
+    }
+
+    async function loadToday() {
+      const [today, budget] = await Promise.all([
+        fetch('/api/stats/today').then(r => r.json()),
+        fetch('/api/budget').then(r => r.json()),
+      ]);
+
+      document.getElementById('stat-today-tokens').textContent = fmtTokens(today.total_tokens);
+      document.getElementById('stat-today-messages').textContent =
+        `${today.messages || 0} mensagens · ${today.sessions || 0} sessões`;
+      document.getElementById('stat-cost').textContent = fmtCost(today.cost);
+      document.getElementById('stat-sessions').textContent = today.sessions || '0';
+
+      if (budget.limit) {
+        const pct = budget.usage_percent || 0;
+        const color = budget.over_budget ? 'text-red-400' : budget.warning ? 'text-amber-400' : 'text-slate-500';
+        document.getElementById('stat-budget').innerHTML =
+          `<span class="${color}">${pct}% do limite (${fmtTokens(budget.limit)}/dia)</span>`;
+      } else {
+        document.getElementById('stat-budget').textContent = 'sem limite configurado';
+      }
+    }
+
+    async function loadCache() {
+      const cache = await fetch('/api/stats/cache').then(r => r.json());
+      const el = document.getElementById('cache-stats');
+      el.innerHTML = '';
+
+      const models = {
+        'claude-sonnet-4-6': 'Sonnet 4.6',
+        'claude-haiku-4-5-20251001': 'Haiku 4.5',
+        'claude-opus-4-7': 'Opus 4.7',
+      };
+
+      let hasData = false;
+      for (const [model, stats] of Object.entries(cache)) {
+        if (!stats.total_tokens) continue;
+        hasData = true;
+        const name = models[model] || model;
+        const rate = stats.cache_hit_rate;
+        const rateColor = rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400';
+        const barWidth = Math.min(100, rate);
+        el.innerHTML += `
+          <div>
+            <div class="flex justify-between text-slate-400 mb-1">
+              <span>${name}</span>
+              <span class="${rateColor} font-semibold">${rate}%</span>
+            </div>
+            <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-emerald-500 rounded-full transition-all" style="width:${barWidth}%"></div>
+            </div>
+            <div class="flex justify-between text-slate-600 text-xs mt-1">
+              <span>total: ${fmtTokens(stats.total_tokens)}</span>
+              <span>custo: ${fmtCost(stats.estimated_cost_usd)}</span>
+            </div>
+          </div>
+        `;
+
+        // Main cache rate card (first model)
+        if (!document.getElementById('stat-cache-rate').textContent || document.getElementById('stat-cache-rate').textContent === '—') {
+          document.getElementById('stat-cache-rate').textContent = rate + '%';
+          const cacheEl = document.getElementById('stat-cache-rate');
+          if (rate >= 80) cacheEl.className = 'stat-value text-2xl font-bold text-emerald-400';
+          else if (rate >= 50) cacheEl.className = 'stat-value text-2xl font-bold text-amber-400';
+          else cacheEl.className = 'stat-value text-2xl font-bold text-red-400';
+        }
+      }
+
+      if (!hasData) {
+        el.innerHTML = '<p class="text-slate-500 text-xs">Sincronize para ver stats de cache.</p>';
+      }
+    }
+
+    async function loadDaily(days = 14) {
+      const data = await fetch(`/api/stats/daily?days=${days}`).then(r => r.json());
+
+      const labels = data.map(d => {
+        const [, m, day] = d.date.split('-');
+        return `${day}/${m}`;
+      });
+      const tokens = data.map(d => d.total_tokens || 0);
+      const costs = data.map(d => d.cost || 0);
+
+      if (dailyChart) {
+        dailyChart.destroy();
+      }
+
+      const ctx = document.getElementById('daily-chart').getContext('2d');
+      dailyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Tokens',
+              data: tokens,
+              backgroundColor: 'rgba(99, 102, 241, 0.6)',
+              borderColor: 'rgba(99, 102, 241, 1)',
+              borderWidth: 1,
+              borderRadius: 3,
+              yAxisID: 'y',
+            },
+            {
+              label: 'Custo USD',
+              data: costs,
+              type: 'line',
+              borderColor: 'rgba(245, 158, 11, 0.8)',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              borderWidth: 2,
+              pointRadius: 3,
+              fill: false,
+              yAxisID: 'y1',
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#94a3b8', font: { family: 'monospace', size: 11 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  if (ctx.datasetIndex === 0) return ` ${fmtTokens(ctx.raw)} tokens`;
+                  return ` ${fmtCost(ctx.raw)}`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: '#1e293b' } },
+            y: {
+              ticks: { color: '#64748b', font: { size: 10 }, callback: v => fmtTokens(v) },
+              grid: { color: '#334155' },
+            },
+            y1: {
+              position: 'right',
+              ticks: { color: '#64748b', font: { size: 10 }, callback: v => '$' + v.toFixed(3) },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
+      });
+    }
+
+    async function loadTips() {
+      const tips = await fetch('/api/optimization').then(r => r.json());
+      const el = document.getElementById('tips');
+      const icons = { success: '✓', warning: '⚠', info: 'ℹ', error: '✗' };
+      const colors = {
+        success: 'border-emerald-700 bg-emerald-950/40',
+        warning: 'border-amber-700 bg-amber-950/40',
+        info: 'border-indigo-700 bg-indigo-950/40',
+        error: 'border-red-700 bg-red-950/40',
+      };
+      const textColors = { success: 'text-emerald-400', warning: 'text-amber-400', info: 'text-indigo-400', error: 'text-red-400' };
+
+      el.innerHTML = tips.map(t => `
+        <div class="rounded-lg border p-3 ${colors[t.level] || colors.info}">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="${textColors[t.level] || textColors.info} text-sm">${icons[t.level] || 'ℹ'}</span>
+            <span class="text-slate-200 text-xs font-semibold">${t.title}</span>
+          </div>
+          <p class="text-slate-400 text-xs leading-relaxed">${t.detail}</p>
+        </div>
+      `).join('');
+    }
+
+    async function loadExpensive() {
+      const prompts = await fetch('/api/prompts/expensive?limit=15').then(r => r.json());
+      const el = document.getElementById('expensive-prompts');
+
+      if (!prompts.length) {
+        el.innerHTML = `<p class="text-slate-500 text-xs text-center py-8">
+          Nenhum prompt registrado ainda.<br>
+          Use a ferramenta MCP <code class="text-indigo-400">record_prompt</code> para rastrear.
+        </p>`;
+        return;
+      }
+
+      el.innerHTML = `
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-slate-500 border-b border-slate-700">
+              <th class="text-left pb-2 font-normal">Prompt</th>
+              <th class="text-left pb-2 font-normal">Projeto</th>
+              <th class="text-right pb-2 font-normal">Input</th>
+              <th class="text-right pb-2 font-normal">Output</th>
+              <th class="text-right pb-2 font-normal">Cache</th>
+              <th class="text-right pb-2 font-normal">Custo</th>
+              <th class="text-right pb-2 font-normal">Data</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800">
+            ${prompts.map(p => `
+              <tr class="hover:bg-slate-800/50 transition-colors">
+                <td class="py-2 pr-3 text-slate-300 max-w-xs truncate" title="${p.prompt_preview || ''}">
+                  ${p.prompt_preview ? p.prompt_preview.substring(0, 60) + (p.prompt_preview.length > 60 ? '…' : '') : '<em class="text-slate-600">sem preview</em>'}
+                  ${p.estimated ? '<span class="text-slate-600 ml-1" title="estimado">~</span>' : ''}
+                </td>
+                <td class="py-2 pr-3 text-slate-400">${p.project || '—'}</td>
+                <td class="py-2 pr-3 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>
+                <td class="py-2 pr-3 text-right text-slate-300">${fmtTokens(p.output_tokens)}</td>
+                <td class="py-2 pr-3 text-right text-emerald-600">${fmtTokens(p.cache_read_tokens)}</td>
+                <td class="py-2 pr-3 text-right text-amber-400">${fmtCost(p.cost_usd)}</td>
+                <td class="py-2 text-right text-slate-500">${p.timestamp ? p.timestamp.substring(0, 10) : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function loadProjects() {
+      const projects = await fetch('/api/stats/projects?days=30').then(r => r.json());
+      const el = document.getElementById('project-breakdown');
+
+      if (!projects.length) {
+        el.innerHTML = '<p class="text-slate-500 text-xs text-center py-4">Sem dados por projeto. Use record_prompt para rastrear.</p>';
+        return;
+      }
+
+      const maxTokens = Math.max(...projects.map(p => p.total_tokens || 0));
+      el.innerHTML = `
+        <div class="space-y-2">
+          ${projects.map(p => {
+            const pct = maxTokens > 0 ? ((p.total_tokens || 0) / maxTokens * 100) : 0;
+            return `
+              <div class="flex items-center gap-3">
+                <span class="text-slate-300 text-xs w-48 truncate">${p.project || 'desconhecido'}</span>
+                <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div class="h-full bg-indigo-500 rounded-full" style="width:${pct}%"></div>
+                </div>
+                <span class="text-slate-400 text-xs w-16 text-right">${fmtTokens(p.total_tokens)}</span>
+                <span class="text-amber-500 text-xs w-16 text-right">${fmtCost(p.cost)}</span>
+                <span class="text-slate-600 text-xs w-20 text-right">${p.prompt_count} prompts</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    let autoCountdown = 30;
+    let countdownTimer = null;
+
+    function resetCountdown() {
+      autoCountdown = 30;
+      updateCountdownDisplay();
+    }
+
+    function updateCountdownDisplay() {
+      document.getElementById('auto-countdown').textContent = autoCountdown + 's';
+    }
+
+    async function syncAndRefresh() {
+      const btn = document.getElementById('sync-btn');
+      btn.textContent = '↻ Sincronizando...';
+      btn.disabled = true;
+      const dot = document.getElementById('auto-dot');
+      dot.className = 'inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse';
+      try {
+        await fetch('/api/sync', { method: 'POST' });
+        await loadAll();
+        resetCountdown();
+      } finally {
+        btn.textContent = '↻ Sincronizar';
+        btn.disabled = false;
+        dot.className = 'inline-block w-1.5 h-1.5 rounded-full bg-emerald-400';
+        setTimeout(() => {
+          dot.className = 'inline-block w-1.5 h-1.5 rounded-full bg-slate-600';
+        }, 2000);
+      }
+    }
+
+    async function loadAll() {
+      await Promise.all([
+        loadToday(),
+        loadCache(),
+        loadTips(),
+        loadExpensive(),
+        loadProjects(),
+        loadDaily(document.getElementById('days-select').value),
+      ]);
+      document.getElementById('last-updated').textContent =
+        'atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    }
+
+    // Auto-sync every 30s with countdown indicator
+    function startAutoSync() {
+      resetCountdown();
+      countdownTimer = setInterval(async () => {
+        autoCountdown--;
+        updateCountdownDisplay();
+        if (autoCountdown <= 0) {
+          resetCountdown();
+          await syncAndRefresh();
+        }
+      }, 1000);
+    }
+
+    loadAll();
+    startAutoSync();
+  </script>
+</body>
+</html>

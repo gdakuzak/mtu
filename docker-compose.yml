@@ -1,0 +1,29 @@
+services:
+  mtu:
+    build: .
+    container_name: mtu
+    ports:
+      - "127.0.0.1:7799:7799"
+    volumes:
+      - "${HOME}/.claude:/claude-data:rw"
+    environment:
+      - MTU_DB_PATH=/claude-data/mtu.db
+      - MTU_CLAUDE_DIR=/claude-data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7799/api/stats/today')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mtu-db:
+    image: datasetteproject/datasette
+    container_name: mtu-db
+    ports:
+      - "127.0.0.1:7800:8001"
+    volumes:
+      - "${HOME}/.claude:/data:ro"
+    command: ["datasette", "/data/mtu.db", "--host", "0.0.0.0", "--port", "8001", "--setting", "sql_time_limit_ms", "5000"]
+    restart: unless-stopped
+    depends_on:
+      - mtu
