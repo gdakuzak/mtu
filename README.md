@@ -1,21 +1,5 @@
 <p align="center">
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="80" height="80" fill="none">
-    <defs>
-      <linearGradient id="mtu-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#0A2540" />
-        <stop offset="50%" stop-color="#00D4B2" />
-        <stop offset="100%" stop-color="#0099FF" />
-      </linearGradient>
-    </defs>
-    <path d="M 25 75 A 38 38 0 1 1 85 40" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round"/>
-    <path d="M 22 45 A 28 28 0 0 1 45 22" stroke="#00D4B2" stroke-width="2" stroke-dasharray="4 4" opacity="0.6" stroke-linecap="round"/>
-    <circle cx="35" cy="25" r="2.5" fill="#0099FF" />
-    <rect x="36" y="52" width="6" height="22" rx="3" fill="#334155" />
-    <rect x="47" y="42" width="6" height="32" rx="3" fill="#00D4B2" />
-    <rect x="58" y="32" width="6" height="42" rx="3" fill="#0099FF" />
-    <path d="M 20 65 L 38 48 L 52 60 L 82 24" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <polygon points="82,24 68,23 80,37" fill="#0099FF" />
-  </svg>
+  <img src="public/img/mtu.svg" width="80" height="80" alt="MTU logo" />
 </p>
 
 # MTU — Monitor de Uso de Tokens
