@@ -4,9 +4,11 @@
 
 # MTU — Monitoring Token Usage
 
-> **M** — **Monitoring** (Real-Time): Rastreia cada requisição LLM e custo no exato momento em que acontece.
-> **T** — **Token Analytics**: Análise profunda de métricas de prompt, completion e por modelo.
-> **U** — **Usage Guardrails**: Defina orçamentos rígidos, alertas automáticos e evite surpresas na fatura da API.
+| | |
+|---|---|
+| **M** — Monitoring (Real-Time) | Rastreia cada requisição LLM e custo no exato momento em que acontece. |
+| **T** — Token Analytics | Análise profunda de métricas de prompt, completion e por modelo. |
+| **U** — Usage Guardrails | Defina orçamentos rígidos, alertas automáticos e evite surpresas na fatura da API. |
 
 Rastreia tokens por prompt, calcula custo estimado e sugere otimizações. Integra com Claude Code via MCP + hook automático.
 
@@ -90,7 +92,7 @@ Após isso, **cada resposta do Claude é registrada automaticamente** — tokens
 Cada turn captura via transcript JSONL da sessão:
 
 | Campo | Fonte |
-|-------|-------|
+| ------- | ------- |
 | `input_tokens` | `message.usage.input_tokens` |
 | `output_tokens` | `message.usage.output_tokens` |
 | `cache_read_tokens` | `message.usage.cache_read_input_tokens` |
@@ -106,7 +108,7 @@ Cada turn captura via transcript JSONL da sessão:
 Quando o hook detecta padrões problemáticos, imprime na sessão:
 
 | Condição | Alerta |
-|----------|--------|
+| ---------- | -------- |
 | tokens ativos > 5K | `prompt pesado: NK tokens — considere /compact` |
 | tokens ativos > 50K | `ALERTA: NK tokens — contexto crítico, use /compact urgente` |
 | cache hit < 60% | `cache hit X% — contexto crescendo sem reuso` |
@@ -117,7 +119,7 @@ Quando o hook detecta padrões problemáticos, imprime na sessão:
 ## MCP Tools disponíveis
 
 | Tool | Descrição |
-|------|-----------|
+| ------ | ----------- |
 | `record_prompt` | Registra manualmente uso de tokens de um prompt |
 | `get_usage_report` | Relatório N dias com cache stats |
 | `get_top_expensive_prompts` | Prompts mais caros em tokens |
