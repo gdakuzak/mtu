@@ -2,9 +2,16 @@
   <img src="public/img/mtu.svg" width="200" height="200" alt="MTU logo" />
 </p>
 
-# MTU — Monitor de Uso de Tokens
+# MTU — Monitoring Token Usage
+
+> **M** — **Monitoring** (Real-Time): Rastreia cada requisição LLM e custo no exato momento em que acontece.
+> **T** — **Token Analytics**: Análise profunda de métricas de prompt, completion e por modelo.
+> **U** — **Usage Guardrails**: Defina orçamentos rígidos, alertas automáticos e evite surpresas na fatura da API.
 
 Rastreia tokens por prompt, calcula custo estimado e sugere otimizações. Integra com Claude Code via MCP + hook automático.
+
+> [!WARNING]
+> **Repositório em construção.** Release pública em breve.
 
 ## Requisitos
 
@@ -125,17 +132,7 @@ Quando o hook detecta padrões problemáticos, imprime na sessão:
 ## Estrutura
 
 ```text
-mtu/
-├── docker-compose.yml          # mtu (dashboard) + mtu-db (datasette)
-├── Dockerfile
-├── hooks/
-│   └── mtu-record-prompt.py   # Stop hook — stdlib only, sem dependências
-└── src/mtu/
-    ├── db.py                   # SQLite (~/.claude/mtu.db)
-    ├── analyzer.py             # Métricas + otimização
-    ├── server.py               # MCP server (FastMCP)
-    └── web/
-        ├── app.py              # FastAPI + /api/record
+mtu/ /api/record
         └── templates/
             └── dashboard.html  # Tailwind dark + Chart.js
 ```
