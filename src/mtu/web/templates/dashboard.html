@@ -29,31 +29,42 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0f172a; }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .prompt-cell { cursor: pointer; max-width: 18rem; }
+    .prompt-cell:hover .prompt-text { color: #a5b4fc; }
+    #prompt-modal { display: none; }
+    #prompt-modal.open { display: flex; }
+    #prompt-modal-body { white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body class="text-slate-100 min-h-screen font-mono">
 
   <!-- Header -->
-  <header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36" fill="none">
-        <defs>
-          <linearGradient id="mtu-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#0A2540" />
-            <stop offset="50%" stop-color="#00D4B2" />
-            <stop offset="100%" stop-color="#0099FF" />
-          </linearGradient>
-        </defs>
-        <path d="M 25 75 A 38 38 0 1 1 85 40" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round"/>
-        <path d="M 22 45 A 28 28 0 0 1 45 22" stroke="#00D4B2" stroke-width="2" stroke-dasharray="4 4" opacity="0.6" stroke-linecap="round"/>
-        <circle cx="35" cy="25" r="2.5" fill="#0099FF" />
-        <rect x="36" y="52" width="6" height="22" rx="3" fill="#0A2540" />
-        <rect x="47" y="42" width="6" height="32" rx="3" fill="#00D4B2" />
-        <rect x="58" y="32" width="6" height="42" rx="3" fill="#0099FF" />
-        <path d="M 20 65 L 38 48 L 52 60 L 82 24" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-        <polygon points="82,24 68,23 80,37" fill="#0099FF" />
-      </svg>
-      <span class="text-slate-500 text-sm">Monitor de Uso de Tokens</span>
+  <header class="border-b border-slate-700 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="28" height="28" fill="none">
+          <defs>
+            <linearGradient id="mtu-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0A2540" />
+              <stop offset="50%" stop-color="#00D4B2" />
+              <stop offset="100%" stop-color="#0099FF" />
+            </linearGradient>
+          </defs>
+          <path d="M 25 75 A 38 38 0 1 1 85 40" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round"/>
+          <path d="M 22 45 A 28 28 0 0 1 45 22" stroke="#00D4B2" stroke-width="2" stroke-dasharray="4 4" opacity="0.6" stroke-linecap="round"/>
+          <circle cx="35" cy="25" r="2.5" fill="#0099FF" />
+          <rect x="36" y="52" width="6" height="22" rx="3" fill="#0A2540" />
+          <rect x="47" y="42" width="6" height="32" rx="3" fill="#00D4B2" />
+          <rect x="58" y="32" width="6" height="42" rx="3" fill="#0099FF" />
+          <path d="M 20 65 L 38 48 L 52 60 L 82 24" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon points="82,24 68,23 80,37" fill="#0099FF" />
+        </svg>
+        <span class="text-slate-400 text-xs font-semibold tracking-wide">MTU</span>
+      </div>
+      <nav class="flex items-center gap-1">
+        <a href="/" class="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-700 text-white">Dashboard</a>
+        <a href="/prompts" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">Prompts</a>
+      </nav>
     </div>
     <div class="flex items-center gap-3">
       <span id="last-updated" class="text-slate-500 text-xs"></span>
@@ -144,8 +155,45 @@
 
   </main>
 
+  <!-- Prompt Modal -->
+  <div id="prompt-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm open:flex">
+    <div class="card max-w-2xl w-full mx-4 flex flex-col max-h-[80vh]">
+      <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <h3 class="text-sm font-semibold text-slate-200">Prompt completo</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1">
+        <pre id="prompt-modal-body" class="text-xs text-slate-300 font-mono leading-relaxed"></pre>
+      </div>
+    </div>
+  </div>
+
   <script>
     let dailyChart = null;
+
+    function sanitizePrompt(text) {
+      if (!text) return '';
+      // strip base64 image data
+      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[imagem removida]');
+      // strip html img tags
+      text = text.replace(/<img[^>]*>/gi, '[imagem removida]');
+      return text;
+    }
+
+    function openModal(fullText) {
+      document.getElementById('prompt-modal-body').textContent = sanitizePrompt(fullText);
+      document.getElementById('prompt-modal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('prompt-modal').classList.remove('open');
+    }
+
+    document.getElementById('prompt-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
     function fmtTokens(n) {
       if (!n) return '0';
@@ -357,9 +405,11 @@
           <tbody class="divide-y divide-slate-800">
             ${prompts.map(p => `
               <tr class="hover:bg-slate-800/50 transition-colors">
-                <td class="py-2 pr-3 text-slate-300 max-w-xs truncate" title="${p.prompt_preview || ''}">
-                  ${p.prompt_preview ? p.prompt_preview.substring(0, 60) + (p.prompt_preview.length > 60 ? '…' : '') : '<em class="text-slate-600">sem preview</em>'}
-                  ${p.estimated ? '<span class="text-slate-600 ml-1" title="estimado">~</span>' : ''}
+                <td class="py-2 pr-3 prompt-cell" onclick="openModal(${JSON.stringify(p.prompt_preview || '')})">
+                  ${p.prompt_preview
+                    ? `<span class="prompt-text text-slate-300 block truncate">${sanitizePrompt(p.prompt_preview).substring(0, 80)}${p.prompt_preview.length > 80 ? '…' : ''}</span>`
+                    : '<em class="text-slate-600">sem preview</em>'}
+                  ${p.estimated ? '<span class="text-slate-600 text-xs" title="estimado">~</span>' : ''}
                 </td>
                 <td class="py-2 pr-3 text-slate-400">${p.project || '—'}</td>
                 <td class="py-2 pr-3 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>

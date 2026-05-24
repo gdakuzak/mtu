@@ -2,6 +2,10 @@
   <img src="public/img/mtu.svg" width="200" height="200" alt="MTU logo" />
 </p>
 
+<p align="center">
+  <strong>Português</strong> · <a href="README.en.md">English</a>
+</p>
+
 # MTU — Monitoring Token Usage
 
 | | |
@@ -41,7 +45,8 @@ docker compose up -d
 
 | Serviço | URL | Descrição |
 |---------|-----|-----------|
-| Dashboard | http://localhost:7799 | Gráficos e análises |
+| Dashboard | http://localhost:7799 | Gráficos, cache stats e otimizações |
+| Prompts | http://localhost:7799/prompts | Histórico de prompts com filtros e ordenação |
 | SQLite UI | http://localhost:7800 | Browse/query direto no banco |
 
 ### 3. Registrar MCP globalmente (todos os projetos)
@@ -98,8 +103,31 @@ Cada turn captura via transcript JSONL da sessão:
 | `cache_read_tokens` | `message.usage.cache_read_input_tokens` |
 | `cache_creation_tokens` | `message.usage.cache_creation_input_tokens` |
 | `model` | `message.model` |
-| `prompt_preview` | Último user message (300 chars) |
+| `prompt_preview` | Último user message com texto real (300 chars, pula tool_results) |
 | `project` | `basename(cwd)` |
+
+---
+
+## Interface Web
+
+### Dashboard (`/`)
+
+- Stats do dia: tokens, custo, sessões, cache hit rate
+- Gráfico de tokens/custo por dia (7/14/30 dias)
+- Cache stats por modelo (lifetime)
+- Sugestões de otimização
+- Tabela dos prompts mais pesados com preview truncado (clique abre modal completo)
+- Breakdown por projeto (30 dias)
+- Auto-sync a cada 30s com countdown
+
+### Prompts (`/prompts`)
+
+- Histórico completo de prompts registrados
+- Filtros: projeto, modelo, intervalo de datas
+- Ordenação clicável em todas as colunas (Data, Projeto, Modelo, Input, Output, Cache, Custo)
+- Paginação "Carregar mais" (50 por vez, server-side)
+- Modal com prompt completo ao clicar em qualquer linha
+- Imagens sanitizadas automaticamente (base64/img tags removidos)
 
 ---
 
@@ -134,7 +162,18 @@ Quando o hook detecta padrões problemáticos, imprime na sessão:
 ## Estrutura
 
 ```text
-mtu/ /api/record
-        └── templates/
-            └── dashboard.html  # Tailwind dark + Chart.js
+mtu/
+├── hooks/
+│   └── mtu-record-prompt.py   # Hook Stop — lê transcript, POST para API
+├── src/mtu/
+│   ├── db.py                  # SQLite + pricing
+│   ├── analyzer.py            # Stats, breakdown, otimização
+│   ├── server.py              # MCP server (FastMCP)
+│   └── web/
+│       ├── app.py             # FastAPI — API + rotas HTML
+│       └── templates/
+│           ├── dashboard.html # Dashboard principal
+│           └── prompts.html   # Histórico de prompts
+├── docker-compose.yml
+└── pyproject.toml
 ```

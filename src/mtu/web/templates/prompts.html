@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MTU — Prompts</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { surface: '#0f172a', card: '#1e293b', border: '#334155', accent: '#6366f1', muted: '#94a3b8' } } }
+    }
+  </script>
+  <style>
+    body { background: #0f172a; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .prompt-cell { cursor: pointer; }
+    .prompt-cell:hover .preview-text { color: #a5b4fc; }
+    #prompt-modal { display: none; }
+    #prompt-modal.open { display: flex; }
+    #prompt-modal-body { white-space: pre-wrap; word-break: break-word; }
+    .model-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 9999px; }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen font-mono">
+
+  <!-- Header -->
+  <header class="border-b border-slate-700 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="28" height="28" fill="none">
+          <defs>
+            <linearGradient id="mtu-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0A2540" />
+              <stop offset="50%" stop-color="#00D4B2" />
+              <stop offset="100%" stop-color="#0099FF" />
+            </linearGradient>
+          </defs>
+          <path d="M 25 75 A 38 38 0 1 1 85 40" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round"/>
+          <path d="M 22 45 A 28 28 0 0 1 45 22" stroke="#00D4B2" stroke-width="2" stroke-dasharray="4 4" opacity="0.6" stroke-linecap="round"/>
+          <circle cx="35" cy="25" r="2.5" fill="#0099FF" />
+          <rect x="36" y="52" width="6" height="22" rx="3" fill="#0A2540" />
+          <rect x="47" y="42" width="6" height="32" rx="3" fill="#00D4B2" />
+          <rect x="58" y="32" width="6" height="42" rx="3" fill="#0099FF" />
+          <path d="M 20 65 L 38 48 L 52 60 L 82 24" stroke="url(#mtu-grad)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+          <polygon points="82,24 68,23 80,37" fill="#0099FF" />
+        </svg>
+        <span class="text-slate-400 text-xs font-semibold tracking-wide">MTU</span>
+      </div>
+      <nav class="flex items-center gap-1">
+        <a href="/" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">Dashboard</a>
+        <a href="/prompts" class="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-700 text-white">Prompts</a>
+      </nav>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="total-count" class="text-slate-500 text-xs"></span>
+    </div>
+  </header>
+
+  <!-- Filters -->
+  <div class="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-3 items-center">
+    <select id="filter-project" onchange="reload()"
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5 min-w-32">
+      <option value="">Todos projetos</option>
+    </select>
+    <select id="filter-model" onchange="reload()"
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5">
+      <option value="">Todos modelos</option>
+      <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+      <option value="claude-opus-4-7">Opus 4.7</option>
+      <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+    </select>
+    <input id="filter-from" type="date" onchange="reload()"
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5"
+      placeholder="De">
+    <input id="filter-to" type="date" onchange="reload()"
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5"
+      placeholder="Até">
+    <button onclick="clearFilters()"
+      class="text-slate-500 hover:text-slate-300 text-xs transition-colors">limpar</button>
+    <div id="loading" class="hidden ml-auto text-slate-500 text-xs animate-pulse">carregando…</div>
+  </div>
+
+  <main class="p-6 max-w-7xl mx-auto">
+    <div class="card overflow-hidden">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-slate-500 border-b border-slate-700 bg-slate-800/40">
+            <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('timestamp')">
+              Data/hora <span id="sort-timestamp" class="text-indigo-400">↓</span>
+            </th>
+            <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('project')">
+              Projeto <span id="sort-project" class="hidden"></span>
+            </th>
+            <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('model')">
+              Modelo <span id="sort-model" class="hidden"></span>
+            </th>
+            <th class="text-left px-4 py-2.5 font-normal">Prompt</th>
+            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('input_tokens')">
+              Input <span id="sort-input_tokens" class="hidden"></span>
+            </th>
+            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('output_tokens')">
+              Output <span id="sort-output_tokens" class="hidden"></span>
+            </th>
+            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('cache_read_tokens')">
+              Cache <span id="sort-cache_read_tokens" class="hidden"></span>
+            </th>
+            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('cost_usd')">
+              Custo <span id="sort-cost_usd" class="hidden"></span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="prompts-body" class="divide-y divide-slate-800">
+          <tr><td colspan="8" class="text-center py-12 text-slate-500">Carregando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="load-more-wrap" class="mt-4 text-center hidden">
+      <button id="load-more-btn" onclick="loadMore()"
+        class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-md transition-colors">
+        Carregar mais
+      </button>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div id="prompt-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="card max-w-2xl w-full mx-4 flex flex-col max-h-[80vh]">
+      <div class="flex items-center justify-between p-4 border-b border-slate-700">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-200">Prompt completo</h3>
+          <p id="modal-meta" class="text-slate-500 text-xs mt-0.5"></p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1">
+        <pre id="prompt-modal-body" class="text-xs text-slate-300 font-mono leading-relaxed"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MODEL_LABELS = {
+      'claude-sonnet-4-6': 'Sonnet',
+      'claude-opus-4-7': 'Opus',
+      'claude-haiku-4-5-20251001': 'Haiku',
+    };
+    const MODEL_COLORS = {
+      'claude-sonnet-4-6': 'bg-indigo-900/60 text-indigo-300',
+      'claude-opus-4-7': 'bg-purple-900/60 text-purple-300',
+      'claude-haiku-4-5-20251001': 'bg-emerald-900/60 text-emerald-300',
+    };
+
+    let offset = 0;
+    const LIMIT = 50;
+    let currentTotal = 0;
+    let sortCol = 'timestamp';
+    let sortDir = 'desc';
+
+    const SORT_COLS = ['timestamp','project','model','input_tokens','output_tokens','cache_read_tokens','cost_usd'];
+
+    function sortBy(col) {
+      if (sortCol === col) {
+        sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        sortCol = col;
+        sortDir = col === 'timestamp' ? 'desc' : 'desc';
+      }
+      updateSortIndicators();
+      reload();
+    }
+
+    function updateSortIndicators() {
+      SORT_COLS.forEach(c => {
+        const el = document.getElementById('sort-' + c);
+        if (!el) return;
+        if (c === sortCol) {
+          el.textContent = sortDir === 'desc' ? '↓' : '↑';
+          el.className = 'text-indigo-400';
+        } else {
+          el.textContent = '';
+          el.className = 'hidden';
+        }
+      });
+    }
+
+    function fmtTokens(n) {
+      if (!n) return '—';
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    function fmtCost(usd) {
+      if (!usd) return '—';
+      return '$' + usd.toFixed(4);
+    }
+
+    function fmtTs(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      const pad = n => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function sanitize(text) {
+      if (!text) return '';
+      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[imagem]');
+      text = text.replace(/<img[^>]*>/gi, '[imagem]');
+      return text;
+    }
+
+    function getFilters() {
+      return {
+        project: document.getElementById('filter-project').value,
+        model: document.getElementById('filter-model').value,
+        date_from: document.getElementById('filter-from').value,
+        date_to: document.getElementById('filter-to').value,
+      };
+    }
+
+    function buildUrl(extraOffset) {
+      const f = getFilters();
+      const params = new URLSearchParams({ limit: LIMIT, offset: extraOffset, sort: sortCol, dir: sortDir });
+      if (f.project) params.set('project', f.project);
+      if (f.model) params.set('model', f.model);
+      if (f.date_from) params.set('date_from', f.date_from);
+      if (f.date_to) params.set('date_to', f.date_to);
+      return `/api/prompts/recent?${params}`;
+    }
+
+    function renderRow(p) {
+      const preview = sanitize(p.prompt_preview || '');
+      const modelLabel = MODEL_LABELS[p.model] || p.model;
+      const modelColor = MODEL_COLORS[p.model] || 'bg-slate-700 text-slate-300';
+      const hasPreview = preview.length > 0;
+      return `
+        <tr class="hover:bg-slate-800/40 transition-colors prompt-cell"
+            onclick='openModal(${JSON.stringify(preview)}, ${JSON.stringify(p)})'>
+          <td class="px-4 py-2.5 text-slate-500 whitespace-nowrap">${fmtTs(p.timestamp)}</td>
+          <td class="px-4 py-2.5 text-slate-400 max-w-[8rem] truncate">${p.project || '—'}</td>
+          <td class="px-4 py-2.5">
+            <span class="model-badge ${modelColor}">${modelLabel}</span>
+          </td>
+          <td class="px-4 py-2.5 max-w-xs">
+            ${hasPreview
+              ? `<span class="preview-text text-slate-300 block truncate">${preview.substring(0, 80)}${preview.length > 80 ? '…' : ''}</span>`
+              : '<em class="text-slate-600">sem preview</em>'}
+          </td>
+          <td class="px-4 py-2.5 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300">${fmtTokens(p.output_tokens)}</td>
+          <td class="px-4 py-2.5 text-right text-emerald-600">${fmtTokens(p.cache_read_tokens)}</td>
+          <td class="px-4 py-2.5 text-right text-amber-400">${fmtCost(p.cost_usd)}</td>
+        </tr>
+      `;
+    }
+
+    async function reload() {
+      offset = 0;
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('prompts-body').innerHTML =
+        '<tr><td colspan="8" class="text-center py-12 text-slate-500">Carregando…</td></tr>';
+      document.getElementById('load-more-wrap').classList.add('hidden');
+      const data = await fetch(buildUrl(0)).then(r => r.json());
+      currentTotal = data.total;
+      document.getElementById('total-count').textContent = `${data.total} prompts`;
+      if (!data.items.length) {
+        document.getElementById('prompts-body').innerHTML =
+          '<tr><td colspan="8" class="text-center py-12 text-slate-500">Nenhum prompt encontrado.</td></tr>';
+      } else {
+        document.getElementById('prompts-body').innerHTML = data.items.map(renderRow).join('');
+        offset = data.items.length;
+        if (offset < currentTotal) {
+          document.getElementById('load-more-wrap').classList.remove('hidden');
+        }
+      }
+      document.getElementById('loading').classList.add('hidden');
+    }
+
+    async function loadMore() {
+      const btn = document.getElementById('load-more-btn');
+      btn.textContent = 'Carregando…';
+      btn.disabled = true;
+      const data = await fetch(buildUrl(offset)).then(r => r.json());
+      document.getElementById('prompts-body').insertAdjacentHTML('beforeend', data.items.map(renderRow).join(''));
+      offset += data.items.length;
+      btn.textContent = 'Carregar mais';
+      btn.disabled = false;
+      if (offset >= currentTotal) {
+        document.getElementById('load-more-wrap').classList.add('hidden');
+      }
+    }
+
+    function clearFilters() {
+      document.getElementById('filter-project').value = '';
+      document.getElementById('filter-model').value = '';
+      document.getElementById('filter-from').value = '';
+      document.getElementById('filter-to').value = '';
+      reload();
+    }
+
+    function openModal(text, p) {
+      document.getElementById('prompt-modal-body').textContent = text || '(sem preview)';
+      const ts = p.timestamp ? new Date(p.timestamp).toLocaleString('pt-BR') : '';
+      const model = MODEL_LABELS[p.model] || p.model;
+      document.getElementById('modal-meta').textContent =
+        [ts, p.project, model].filter(Boolean).join(' · ');
+      document.getElementById('prompt-modal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('prompt-modal').classList.remove('open');
+    }
+
+    document.getElementById('prompt-modal').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    async function loadProjects() {
+      const projects = await fetch('/api/prompts/projects').then(r => r.json());
+      const sel = document.getElementById('filter-project');
+      projects.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        sel.appendChild(opt);
+      });
+    }
+
+    loadProjects().then(() => reload());
+  </script>
+</body>
+</html>

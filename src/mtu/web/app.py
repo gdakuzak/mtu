@@ -47,7 +47,8 @@ class RecordRequest(BaseModel):
 
 @app.get("/", response_class=FileResponse)
 async def dashboard():
-    return FileResponse(str(DASHBOARD_HTML), media_type="text/html")
+    return FileResponse(str(DASHBOARD_HTML), media_type="text/html",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.post("/api/record")
@@ -193,6 +194,86 @@ async def api_expensive(limit: int = 15, project: str | None = None):
         if r.get("prompt_preview"):
             r["prompt_preview"] = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", r["prompt_preview"])
     return rows
+
+
+SORTABLE_COLS = {
+    "timestamp", "project", "model",
+    "input_tokens", "output_tokens", "cache_read_tokens", "cost_usd",
+}
+
+@app.get("/api/prompts/recent")
+async def api_recent(
+    limit: int = 50,
+    offset: int = 0,
+    project: str | None = None,
+    model: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort: str = "timestamp",
+    dir: str = "desc",
+):
+    import re
+    col = sort if sort in SORTABLE_COLS else "timestamp"
+    order = "DESC" if dir.lower() == "desc" else "ASC"
+    clauses = []
+    params: list = []
+    if project:
+        clauses.append("project = ?")
+        params.append(project)
+    if model:
+        clauses.append("model = ?")
+        params.append(model)
+    if date_from:
+        clauses.append("date(timestamp) >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date(timestamp) <= ?")
+        params.append(date_to)
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    params += [limit, offset]
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, session_id, project, timestamp, prompt_preview,
+                   input_tokens, output_tokens, cache_read_tokens,
+                   cache_creation_tokens, model, cost_usd, estimated
+            FROM prompt_logs
+            {where}
+            ORDER BY {col} {order}
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        ).fetchall()
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM prompt_logs {where}",
+            params[:-2],
+        ).fetchone()[0]
+    result = []
+    ctrl = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+    for r in rows:
+        d = dict(r)
+        if d.get("prompt_preview"):
+            d["prompt_preview"] = ctrl.sub("", d["prompt_preview"])
+        result.append(d)
+    return {"total": total, "offset": offset, "limit": limit, "items": result}
+
+
+@app.get("/api/prompts/projects")
+async def api_prompt_projects():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT project FROM prompt_logs WHERE project IS NOT NULL ORDER BY project"
+        ).fetchall()
+    return [r["project"] for r in rows if r["project"]]
+
+
+PROMPTS_HTML = Path(__file__).parent / "templates" / "prompts.html"
+
+
+@app.get("/prompts", response_class=FileResponse)
+async def prompts_page():
+    return FileResponse(str(PROMPTS_HTML), media_type="text/html",
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/api/optimization")

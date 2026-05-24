@@ -59,7 +59,7 @@ def main():
     cache_read = usage.get("cache_read_input_tokens", 0)
     cache_creation = usage.get("cache_creation_input_tokens", 0)
 
-    # Achar último user message antes deste assistant
+    # Achar último user message com texto real (pula tool_result puro)
     prompt_preview = ""
     past_assistant = False
     for line in reversed(lines):
@@ -69,16 +69,22 @@ def main():
         if not past_assistant:
             continue
         msg_inner = line.get("message", {})
-        if isinstance(msg_inner, dict) and msg_inner.get("role") == "user":
-            content = msg_inner.get("content", "")
-            if isinstance(content, str):
-                prompt_preview = sanitize(content[:300])
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        prompt_preview = sanitize(block.get("text", "")[:300])
-                        break
+        if not isinstance(msg_inner, dict) or msg_inner.get("role") != "user":
+            continue
+        content = msg_inner.get("content", "")
+        if isinstance(content, str) and content.strip():
+            prompt_preview = sanitize(content[:300])
             break
+        elif isinstance(content, list):
+            text = next(
+                (block.get("text", "") for block in content
+                 if isinstance(block, dict) and block.get("type") == "text"),
+                "",
+            )
+            if text.strip():
+                prompt_preview = sanitize(text[:300])
+                break
+            # só tool_result — continua procurando
 
     project = os.path.basename(cwd.rstrip("/"))
 
