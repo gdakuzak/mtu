@@ -92,6 +92,27 @@ After this, **every Claude response is recorded automatically** — real tokens 
 
 ---
 
+## Updating
+
+### Manual
+
+```bash
+make update
+```
+
+Runs `git pull` + rebuild + redeploy. Shows previous → new version and commit list.
+
+### Automatic (cron)
+
+```bash
+make setup-auto-update   # install cron job (checks hourly)
+make remove-auto-update  # remove
+```
+
+Update interval configurable via `MTU_UPDATE_DAYS` (default: 7 days). Only rebuilds when a new version is detected upstream — no unnecessary rebuilds.
+
+---
+
 ## What Gets Recorded
 
 Each turn is captured from the session JSONL transcript:
@@ -174,6 +195,10 @@ mtu/
 │       └── templates/
 │           ├── dashboard.html # Main dashboard
 │           └── prompts.html   # Prompt history
+├── scripts/
+│   ├── release.sh             # Bump version + changelog + git tag
+│   └── auto-update.sh         # Update via git pull + rebuild (omz-inspired)
+├── Makefile                   # Targets: release-*, update, setup-auto-update
 ├── docker-compose.yml
 └── pyproject.toml
 ```

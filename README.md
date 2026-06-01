@@ -92,6 +92,27 @@ Após isso, **cada resposta do Claude é registrada automaticamente** — tokens
 
 ---
 
+## Atualização
+
+### Manual
+
+```bash
+make update
+```
+
+Faz `git pull` + rebuild + redeploy. Mostra versão anterior → nova e lista de commits.
+
+### Automática (cron)
+
+```bash
+make setup-auto-update   # instala cron job (verifica hourly)
+make remove-auto-update  # remove
+```
+
+Intervalo de update configurável via `MTU_UPDATE_DAYS` (default: 7 dias). Só rebuilda quando detecta versão nova no upstream — sem rebuild desnecessário.
+
+---
+
 ## O que é registrado
 
 Cada turn captura via transcript JSONL da sessão:
@@ -174,6 +195,10 @@ mtu/
 │       └── templates/
 │           ├── dashboard.html # Dashboard principal
 │           └── prompts.html   # Histórico de prompts
+├── scripts/
+│   ├── release.sh             # Bump versão + changelog + tag git
+│   └── auto-update.sh         # Update via git pull + rebuild (omz-inspired)
+├── Makefile                   # Targets: release-*, update, setup-auto-update
 ├── docker-compose.yml
 └── pyproject.toml
 ```
