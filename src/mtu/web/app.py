@@ -1,10 +1,13 @@
+import hashlib
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
@@ -21,6 +24,33 @@ from ..analyzer import (
 )
 
 DASHBOARD_HTML = Path(__file__).parent / "templates" / "dashboard.html"
+PUBLIC_DIR = next(
+    (p / "public" for p in Path(__file__).parents if (p / "public").is_dir()),
+    Path(__file__).parent / "public",
+)
+
+
+def _compute_version() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    src_root = Path(__file__).parents[2]
+    h = hashlib.md5()
+    for f in sorted(src_root.rglob("*.py")):
+        try:
+            h.update(f.read_bytes())
+        except Exception:
+            pass
+    return h.hexdigest()[:8]
+
+
+APP_VERSION = _compute_version()
 
 
 @asynccontextmanager
@@ -31,6 +61,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MTU - Token Usage Monitor", lifespan=lifespan)
+
+if PUBLIC_DIR.exists():
+    app.mount("/public", StaticFiles(directory=str(PUBLIC_DIR)), name="public")
+
+
+@app.get("/api/version")
+async def api_version():
+    return {"version": APP_VERSION}
 
 
 class RecordRequest(BaseModel):
@@ -110,6 +148,7 @@ def _generate_inline_tips(req: RecordRequest) -> list[str]:
 
 @app.get("/api/stats/daily")
 async def api_daily(days: int = 14):
+    from datetime import timedelta
     daily = get_daily_breakdown(days)
     by_date: dict = {}
     for row in daily:
@@ -120,8 +159,7 @@ async def api_daily(days: int = 14):
         by_date[d]["sessions"] += row["sessions"] or 0
         by_date[d]["cost"] += row["cost"] or 0
 
-    # Merge com dados reais do prompt_logs (hoje)
-    today = datetime.now().strftime("%Y-%m-%d")
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with get_conn() as conn:
         pl = conn.execute(
             """
@@ -134,7 +172,7 @@ async def api_daily(days: int = 14):
             WHERE date(timestamp) >= ?
             GROUP BY date(timestamp)
             """,
-            ((datetime.now().replace(day=1).strftime("%Y-%m-%d")),),
+            (cutoff,),
         ).fetchall()
 
     for row in pl:

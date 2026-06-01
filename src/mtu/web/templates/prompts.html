@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTU — Prompts</title>
+  <link rel="icon" type="image/svg+xml" href="/public/img/mtu.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -55,8 +56,12 @@
         <a href="/prompts" class="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-700 text-white">Prompts</a>
       </nav>
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       <span id="total-count" class="text-slate-500 text-xs"></span>
+      <button onclick="toggleLang()" id="lang-btn"
+        class="px-2 py-1 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 text-xs rounded-md transition-colors">
+        EN
+      </button>
     </div>
   </header>
 
@@ -64,24 +69,22 @@
   <div class="px-6 py-3 border-b border-slate-800 flex flex-wrap gap-3 items-center">
     <select id="filter-project" onchange="reload()"
       class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5 min-w-32">
-      <option value="">Todos projetos</option>
+      <option value="" data-i18n="all_projects">Todos projetos</option>
     </select>
     <select id="filter-model" onchange="reload()"
       class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5">
-      <option value="">Todos modelos</option>
+      <option value="" data-i18n="all_models">Todos modelos</option>
       <option value="claude-sonnet-4-6">Sonnet 4.6</option>
       <option value="claude-opus-4-7">Opus 4.7</option>
       <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
     </select>
     <input id="filter-from" type="date" onchange="reload()"
-      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5"
-      placeholder="De">
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5">
     <input id="filter-to" type="date" onchange="reload()"
-      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5"
-      placeholder="Até">
+      class="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1.5">
     <button onclick="clearFilters()"
-      class="text-slate-500 hover:text-slate-300 text-xs transition-colors">limpar</button>
-    <div id="loading" class="hidden ml-auto text-slate-500 text-xs animate-pulse">carregando…</div>
+      class="text-slate-500 hover:text-slate-300 text-xs transition-colors" data-i18n="clear">limpar</button>
+    <div id="loading" class="hidden ml-auto text-slate-500 text-xs animate-pulse" data-i18n="loading">carregando…</div>
   </div>
 
   <main class="p-6 max-w-7xl mx-auto">
@@ -90,13 +93,13 @@
         <thead>
           <tr class="text-slate-500 border-b border-slate-700 bg-slate-800/40">
             <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('timestamp')">
-              Data/hora <span id="sort-timestamp" class="text-indigo-400">↓</span>
+              <span data-i18n="col_datetime">Data/hora</span> <span id="sort-timestamp" class="text-indigo-400">↓</span>
             </th>
             <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('project')">
-              Projeto <span id="sort-project" class="hidden"></span>
+              <span data-i18n="col_project">Projeto</span> <span id="sort-project" class="hidden"></span>
             </th>
             <th class="text-left px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('model')">
-              Modelo <span id="sort-model" class="hidden"></span>
+              <span data-i18n="col_model">Modelo</span> <span id="sort-model" class="hidden"></span>
             </th>
             <th class="text-left px-4 py-2.5 font-normal">Prompt</th>
             <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('input_tokens')">
@@ -109,21 +112,20 @@
               Cache <span id="sort-cache_read_tokens" class="hidden"></span>
             </th>
             <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('cost_usd')">
-              Custo <span id="sort-cost_usd" class="hidden"></span>
+              <span data-i18n="col_cost">Custo</span> <span id="sort-cost_usd" class="hidden"></span>
             </th>
           </tr>
         </thead>
         <tbody id="prompts-body" class="divide-y divide-slate-800">
-          <tr><td colspan="8" class="text-center py-12 text-slate-500">Carregando…</td></tr>
+          <tr><td colspan="8" class="text-center py-12 text-slate-500" data-i18n="loading_cap">Carregando…</td></tr>
         </tbody>
       </table>
     </div>
 
     <div id="load-more-wrap" class="mt-4 text-center hidden">
       <button id="load-more-btn" onclick="loadMore()"
-        class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-md transition-colors">
-        Carregar mais
-      </button>
+        class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-md transition-colors"
+        data-i18n="load_more">Carregar mais</button>
     </div>
   </main>
 
@@ -132,7 +134,7 @@
     <div class="card max-w-2xl w-full mx-4 flex flex-col max-h-[80vh]">
       <div class="flex items-center justify-between p-4 border-b border-slate-700">
         <div>
-          <h3 class="text-sm font-semibold text-slate-200">Prompt completo</h3>
+          <h3 class="text-sm font-semibold text-slate-200" data-i18n="full_prompt">Prompt completo</h3>
           <p id="modal-meta" class="text-slate-500 text-xs mt-0.5"></p>
         </div>
         <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
@@ -144,6 +146,68 @@
   </div>
 
   <script>
+    const I18N = {
+      pt: {
+        all_projects:    'Todos projetos',
+        all_models:      'Todos modelos',
+        clear:           'limpar',
+        loading:         'carregando…',
+        loading_cap:     'Carregando…',
+        no_prompts:      'Nenhum prompt encontrado.',
+        load_more:       'Carregar mais',
+        loading_more:    'Carregando…',
+        no_preview:      'sem preview',
+        no_preview_p:    '(sem preview)',
+        full_prompt:     'Prompt completo',
+        col_datetime:    'Data/hora',
+        col_project:     'Projeto',
+        col_model:       'Modelo',
+        col_cost:        'Custo',
+        new_version:     'Nova versão disponível',
+        update_btn:      'Atualizar',
+      },
+      en: {
+        all_projects:    'All projects',
+        all_models:      'All models',
+        clear:           'clear',
+        loading:         'loading…',
+        loading_cap:     'Loading…',
+        no_prompts:      'No prompts found.',
+        load_more:       'Load more',
+        loading_more:    'Loading…',
+        no_preview:      'no preview',
+        no_preview_p:    '(no preview)',
+        full_prompt:     'Full prompt',
+        col_datetime:    'Date/time',
+        col_project:     'Project',
+        col_model:       'Model',
+        col_cost:        'Cost',
+        new_version:     'New version available',
+        update_btn:      'Update',
+      },
+    };
+
+    let LANG = localStorage.getItem('mtu-lang') || 'pt';
+
+    function t(key) {
+      return I18N[LANG][key] ?? I18N.pt[key] ?? key;
+    }
+
+    function applyLang() {
+      document.documentElement.lang = LANG === 'pt' ? 'pt-BR' : 'en';
+      document.getElementById('lang-btn').textContent = LANG === 'pt' ? 'EN' : 'PT';
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        el.textContent = t(el.dataset.i18n);
+      });
+    }
+
+    function toggleLang() {
+      LANG = LANG === 'pt' ? 'en' : 'pt';
+      localStorage.setItem('mtu-lang', LANG);
+      applyLang();
+      reload();
+    }
+
     const MODEL_LABELS = {
       'claude-sonnet-4-6': 'Sonnet',
       'claude-opus-4-7': 'Opus',
@@ -168,7 +232,7 @@
         sortDir = sortDir === 'desc' ? 'asc' : 'desc';
       } else {
         sortCol = col;
-        sortDir = col === 'timestamp' ? 'desc' : 'desc';
+        sortDir = 'desc';
       }
       updateSortIndicators();
       reload();
@@ -209,8 +273,8 @@
 
     function sanitize(text) {
       if (!text) return '';
-      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[imagem]');
-      text = text.replace(/<img[^>]*>/gi, '[imagem]');
+      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[image]');
+      text = text.replace(/<img[^>]*>/gi, '[image]');
       return text;
     }
 
@@ -249,7 +313,7 @@
           <td class="px-4 py-2.5 max-w-xs">
             ${hasPreview
               ? `<span class="preview-text text-slate-300 block truncate">${preview.substring(0, 80)}${preview.length > 80 ? '…' : ''}</span>`
-              : '<em class="text-slate-600">sem preview</em>'}
+              : `<em class="text-slate-600">${t('no_preview')}</em>`}
           </td>
           <td class="px-4 py-2.5 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>
           <td class="px-4 py-2.5 text-right text-slate-300">${fmtTokens(p.output_tokens)}</td>
@@ -263,19 +327,20 @@
       offset = 0;
       document.getElementById('loading').classList.remove('hidden');
       document.getElementById('prompts-body').innerHTML =
-        '<tr><td colspan="8" class="text-center py-12 text-slate-500">Carregando…</td></tr>';
+        `<tr><td colspan="8" class="text-center py-12 text-slate-500">${t('loading_cap')}</td></tr>`;
       document.getElementById('load-more-wrap').classList.add('hidden');
       const data = await fetch(buildUrl(0)).then(r => r.json());
       currentTotal = data.total;
       document.getElementById('total-count').textContent = `${data.total} prompts`;
       if (!data.items.length) {
         document.getElementById('prompts-body').innerHTML =
-          '<tr><td colspan="8" class="text-center py-12 text-slate-500">Nenhum prompt encontrado.</td></tr>';
+          `<tr><td colspan="8" class="text-center py-12 text-slate-500">${t('no_prompts')}</td></tr>`;
       } else {
         document.getElementById('prompts-body').innerHTML = data.items.map(renderRow).join('');
         offset = data.items.length;
         if (offset < currentTotal) {
           document.getElementById('load-more-wrap').classList.remove('hidden');
+          document.getElementById('load-more-btn').textContent = t('load_more');
         }
       }
       document.getElementById('loading').classList.add('hidden');
@@ -283,12 +348,12 @@
 
     async function loadMore() {
       const btn = document.getElementById('load-more-btn');
-      btn.textContent = 'Carregando…';
+      btn.textContent = t('loading_more');
       btn.disabled = true;
       const data = await fetch(buildUrl(offset)).then(r => r.json());
       document.getElementById('prompts-body').insertAdjacentHTML('beforeend', data.items.map(renderRow).join(''));
       offset += data.items.length;
-      btn.textContent = 'Carregar mais';
+      btn.textContent = t('load_more');
       btn.disabled = false;
       if (offset >= currentTotal) {
         document.getElementById('load-more-wrap').classList.add('hidden');
@@ -304,8 +369,9 @@
     }
 
     function openModal(text, p) {
-      document.getElementById('prompt-modal-body').textContent = text || '(sem preview)';
-      const ts = p.timestamp ? new Date(p.timestamp).toLocaleString('pt-BR') : '';
+      document.getElementById('prompt-modal-body').textContent = text || t('no_preview_p');
+      const locale = LANG === 'pt' ? 'pt-BR' : 'en-US';
+      const ts = p.timestamp ? new Date(p.timestamp).toLocaleString(locale) : '';
       const model = MODEL_LABELS[p.model] || p.model;
       document.getElementById('modal-meta').textContent =
         [ts, p.project, model].filter(Boolean).join(' · ');
@@ -332,7 +398,30 @@
       });
     }
 
+    applyLang();
     loadProjects().then(() => reload());
+
+    // Update banner
+    let _appVersion = null;
+    async function checkVersion() {
+      try {
+        const r = await fetch('/api/version');
+        const { version } = await r.json();
+        if (_appVersion === null) { _appVersion = version; return; }
+        if (version !== _appVersion) {
+          document.getElementById('update-banner-text').textContent = t('new_version');
+          document.getElementById('update-banner-btn').textContent = t('update_btn');
+          document.getElementById('update-banner').classList.remove('hidden');
+        }
+      } catch {}
+    }
+    setInterval(checkVersion, 30000);
   </script>
+
+  <div id="update-banner" class="hidden fixed bottom-4 right-4 z-50 flex items-center gap-3 bg-indigo-600 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium">
+    <span id="update-banner-text">Nova versão disponível</span>
+    <button id="update-banner-btn" onclick="location.reload()" class="bg-white text-indigo-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-50 transition">Atualizar</button>
+    <button onclick="document.getElementById('update-banner').classList.add('hidden')" class="opacity-60 hover:opacity-100 text-lg leading-none">&times;</button>
+  </div>
 </body>
 </html>

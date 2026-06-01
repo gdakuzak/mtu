@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MTU — Token Usage Monitor</title>
+  <link rel="icon" type="image/svg+xml" href="/public/img/mtu.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -72,9 +73,13 @@
         <span id="auto-dot" class="inline-block w-1.5 h-1.5 rounded-full bg-slate-600"></span>
         <span id="auto-countdown">30s</span>
       </span>
-      <button id="sync-btn" onclick="syncAndRefresh()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-md transition-colors">
-        ↻ Sincronizar
+      <button onclick="toggleLang()" id="lang-btn"
+        class="px-2 py-1 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 text-xs rounded-md transition-colors">
+        EN
       </button>
+      <button id="sync-btn" onclick="syncAndRefresh()"
+        class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-md transition-colors"
+        data-i18n="sync">↻ Sincronizar</button>
     </div>
   </header>
 
@@ -83,7 +88,7 @@
     <!-- Stats Cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="card p-4">
-        <div class="text-slate-400 text-xs mb-1">Tokens hoje</div>
+        <div class="text-slate-400 text-xs mb-1" data-i18n="tokens_today">Tokens hoje</div>
         <div id="stat-today-tokens" class="stat-value text-2xl font-bold text-white">—</div>
         <div id="stat-today-messages" class="text-slate-500 text-xs mt-1"></div>
       </div>
@@ -93,12 +98,12 @@
         <div class="text-slate-500 text-xs mt-1">lifetime</div>
       </div>
       <div class="card p-4">
-        <div class="text-slate-400 text-xs mb-1">Custo estimado hoje</div>
+        <div class="text-slate-400 text-xs mb-1" data-i18n="cost_today">Custo estimado hoje</div>
         <div id="stat-cost" class="stat-value text-2xl font-bold text-amber-400">—</div>
-        <div class="text-slate-500 text-xs mt-1">baseado em API pricing</div>
+        <div class="text-slate-500 text-xs mt-1" data-i18n="based_on_pricing">baseado em API pricing</div>
       </div>
       <div class="card p-4">
-        <div class="text-slate-400 text-xs mb-1">Sessões hoje</div>
+        <div class="text-slate-400 text-xs mb-1" data-i18n="sessions_today">Sessões hoje</div>
         <div id="stat-sessions" class="stat-value text-2xl font-bold text-indigo-400">—</div>
         <div id="stat-budget" class="text-slate-500 text-xs mt-1"></div>
       </div>
@@ -108,12 +113,12 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="card p-4 lg:col-span-2">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold text-slate-300">Tokens por dia</h2>
+          <h2 class="text-sm font-semibold text-slate-300" data-i18n="tokens_per_day">Tokens por dia</h2>
           <select id="days-select" onchange="loadDaily(this.value)"
             class="bg-slate-700 border border-slate-600 text-slate-300 text-xs rounded px-2 py-1">
-            <option value="7">7 dias</option>
-            <option value="14" selected>14 dias</option>
-            <option value="30">30 dias</option>
+            <option value="7" data-i18n="7_days">7 dias</option>
+            <option value="14" selected data-i18n="14_days">14 dias</option>
+            <option value="30" data-i18n="30_days">30 dias</option>
           </select>
         </div>
         <canvas id="daily-chart" height="120"></canvas>
@@ -127,29 +132,29 @@
 
     <!-- Optimization Tips -->
     <div class="card p-4">
-      <h2 class="text-sm font-semibold text-slate-300 mb-3">Sugestões de otimização</h2>
+      <h2 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="opt_tips">Sugestões de otimização</h2>
       <div id="tips" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
     </div>
 
     <!-- Expensive Prompts -->
     <div class="card p-4">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold text-slate-300">Prompts mais pesados</h2>
-        <span class="text-slate-500 text-xs">registrados via record_prompt</span>
+        <h2 class="text-sm font-semibold text-slate-300" data-i18n="heaviest_prompts">Prompts mais pesados</h2>
+        <span class="text-slate-500 text-xs" data-i18n="tracked_via">registrados via record_prompt</span>
       </div>
       <div id="expensive-prompts">
         <p class="text-slate-500 text-xs text-center py-8">
-          Nenhum prompt registrado ainda.<br>
-          Use a ferramenta MCP <code class="text-indigo-400">record_prompt</code> para rastrear.
+          <span data-i18n="no_prompts_yet">Nenhum prompt registrado ainda.</span><br>
+          <span data-i18n="use_mcp">Use a ferramenta MCP <code class="text-indigo-400">record_prompt</code> para rastrear.</span>
         </p>
       </div>
     </div>
 
     <!-- Project Breakdown -->
     <div class="card p-4">
-      <h2 class="text-sm font-semibold text-slate-300 mb-3">Por projeto (30 dias)</h2>
+      <h2 class="text-sm font-semibold text-slate-300 mb-3" data-i18n="by_project">Por projeto (30 dias)</h2>
       <div id="project-breakdown">
-        <p class="text-slate-500 text-xs text-center py-4">Sem dados por projeto ainda.</p>
+        <p class="text-slate-500 text-xs text-center py-4" data-i18n="no_project_data">Sem dados por projeto ainda.</p>
       </div>
     </div>
 
@@ -159,7 +164,7 @@
   <div id="prompt-modal" class="fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm open:flex">
     <div class="card max-w-2xl w-full mx-4 flex flex-col max-h-[80vh]">
       <div class="flex items-center justify-between p-4 border-b border-slate-700">
-        <h3 class="text-sm font-semibold text-slate-200">Prompt completo</h3>
+        <h3 class="text-sm font-semibold text-slate-200" data-i18n="full_prompt">Prompt completo</h3>
         <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
       </div>
       <div class="p-4 overflow-y-auto flex-1">
@@ -169,14 +174,115 @@
   </div>
 
   <script>
+    const I18N = {
+      pt: {
+        sync:             '↻ Sincronizar',
+        syncing:          '↻ Sincronizando...',
+        tokens_today:     'Tokens hoje',
+        cost_today:       'Custo estimado hoje',
+        sessions_today:   'Sessões hoje',
+        based_on_pricing: 'baseado em API pricing',
+        no_limit:         'sem limite configurado',
+        of_limit:         'do limite',
+        tokens_per_day:   'Tokens por dia',
+        '7_days':         '7 dias',
+        '14_days':        '14 dias',
+        '30_days':        '30 dias',
+        opt_tips:         'Sugestões de otimização',
+        heaviest_prompts: 'Prompts mais pesados',
+        tracked_via:      'registrados via record_prompt',
+        no_prompts_yet:   'Nenhum prompt registrado ainda.',
+        use_mcp:          'Use a ferramenta MCP record_prompt para rastrear.',
+        by_project:       'Por projeto (30 dias)',
+        no_project_data:  'Sem dados por projeto ainda.',
+        full_prompt:      'Prompt completo',
+        messages:         'mensagens',
+        sessions:         'sessões',
+        cost_label:       'custo:',
+        unknown:          'desconhecido',
+        no_preview:       'sem preview',
+        updated:          'atualizado',
+        new_version:      'Nova versão disponível',
+        update_btn:       'Atualizar',
+        col_project:      'Projeto',
+        col_cost:         'Custo',
+        col_date:         'Data',
+        col_prompt:       'Prompt',
+        sync_cache:       'Sincronize para ver stats de cache.',
+        no_project_use:   'Sem dados por projeto. Use record_prompt para rastrear.',
+        prompts_label:    'prompts',
+      },
+      en: {
+        sync:             '↻ Sync',
+        syncing:          '↻ Syncing...',
+        tokens_today:     'Tokens today',
+        cost_today:       'Est. cost today',
+        sessions_today:   'Sessions today',
+        based_on_pricing: 'based on API pricing',
+        no_limit:         'no limit configured',
+        of_limit:         'of limit',
+        tokens_per_day:   'Tokens per day',
+        '7_days':         '7 days',
+        '14_days':        '14 days',
+        '30_days':        '30 days',
+        opt_tips:         'Optimization tips',
+        heaviest_prompts: 'Heaviest prompts',
+        tracked_via:      'tracked via record_prompt',
+        no_prompts_yet:   'No prompts recorded yet.',
+        use_mcp:          'Use the MCP tool record_prompt to track.',
+        by_project:       'By project (30 days)',
+        no_project_data:  'No project data yet.',
+        full_prompt:      'Full prompt',
+        messages:         'messages',
+        sessions:         'sessions',
+        cost_label:       'cost:',
+        unknown:          'unknown',
+        no_preview:       'no preview',
+        updated:          'updated',
+        new_version:      'New version available',
+        update_btn:       'Update',
+        col_project:      'Project',
+        col_cost:         'Cost',
+        col_date:         'Date',
+        col_prompt:       'Prompt',
+        sync_cache:       'Sync to see cache stats.',
+        no_project_use:   'No project data. Use record_prompt to track.',
+        prompts_label:    'prompts',
+      },
+    };
+
+    let LANG = localStorage.getItem('mtu-lang') || 'pt';
+
+    function t(key) {
+      return I18N[LANG][key] ?? I18N.pt[key] ?? key;
+    }
+
+    function applyLang() {
+      document.documentElement.lang = LANG === 'pt' ? 'pt-BR' : 'en';
+      document.getElementById('lang-btn').textContent = LANG === 'pt' ? 'EN' : 'PT';
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.dataset.i18n;
+        if (el.tagName === 'OPTION') {
+          el.textContent = t(key);
+        } else {
+          el.textContent = t(key);
+        }
+      });
+    }
+
+    function toggleLang() {
+      LANG = LANG === 'pt' ? 'en' : 'pt';
+      localStorage.setItem('mtu-lang', LANG);
+      applyLang();
+      loadAll();
+    }
+
     let dailyChart = null;
 
     function sanitizePrompt(text) {
       if (!text) return '';
-      // strip base64 image data
-      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[imagem removida]');
-      // strip html img tags
-      text = text.replace(/<img[^>]*>/gi, '[imagem removida]');
+      text = text.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '[image]');
+      text = text.replace(/<img[^>]*>/gi, '[image]');
       return text;
     }
 
@@ -215,7 +321,7 @@
 
       document.getElementById('stat-today-tokens').textContent = fmtTokens(today.total_tokens);
       document.getElementById('stat-today-messages').textContent =
-        `${today.messages || 0} mensagens · ${today.sessions || 0} sessões`;
+        `${today.messages || 0} ${t('messages')} · ${today.sessions || 0} ${t('sessions')}`;
       document.getElementById('stat-cost').textContent = fmtCost(today.cost);
       document.getElementById('stat-sessions').textContent = today.sessions || '0';
 
@@ -223,9 +329,9 @@
         const pct = budget.usage_percent || 0;
         const color = budget.over_budget ? 'text-red-400' : budget.warning ? 'text-amber-400' : 'text-slate-500';
         document.getElementById('stat-budget').innerHTML =
-          `<span class="${color}">${pct}% do limite (${fmtTokens(budget.limit)}/dia)</span>`;
+          `<span class="${color}">${pct}% ${t('of_limit')} (${fmtTokens(budget.limit)}/dia)</span>`;
       } else {
-        document.getElementById('stat-budget').textContent = 'sem limite configurado';
+        document.getElementById('stat-budget').textContent = t('no_limit');
       }
     }
 
@@ -259,12 +365,11 @@
             </div>
             <div class="flex justify-between text-slate-600 text-xs mt-1">
               <span>total: ${fmtTokens(stats.total_tokens)}</span>
-              <span>custo: ${fmtCost(stats.estimated_cost_usd)}</span>
+              <span>${t('cost_label')} ${fmtCost(stats.estimated_cost_usd)}</span>
             </div>
           </div>
         `;
 
-        // Main cache rate card (first model)
         if (!document.getElementById('stat-cache-rate').textContent || document.getElementById('stat-cache-rate').textContent === '—') {
           document.getElementById('stat-cache-rate').textContent = rate + '%';
           const cacheEl = document.getElementById('stat-cache-rate');
@@ -275,7 +380,7 @@
       }
 
       if (!hasData) {
-        el.innerHTML = '<p class="text-slate-500 text-xs">Sincronize para ver stats de cache.</p>';
+        el.innerHTML = `<p class="text-slate-500 text-xs">${t('sync_cache')}</p>`;
       }
     }
 
@@ -309,7 +414,7 @@
               yAxisID: 'y',
             },
             {
-              label: 'Custo USD',
+              label: 'Cost USD',
               data: costs,
               type: 'line',
               borderColor: 'rgba(245, 158, 11, 0.8)',
@@ -366,13 +471,13 @@
       };
       const textColors = { success: 'text-emerald-400', warning: 'text-amber-400', info: 'text-indigo-400', error: 'text-red-400' };
 
-      el.innerHTML = tips.map(t => `
-        <div class="rounded-lg border p-3 ${colors[t.level] || colors.info}">
+      el.innerHTML = tips.map(tip => `
+        <div class="rounded-lg border p-3 ${colors[tip.level] || colors.info}">
           <div class="flex items-center gap-2 mb-1">
-            <span class="${textColors[t.level] || textColors.info} text-sm">${icons[t.level] || 'ℹ'}</span>
-            <span class="text-slate-200 text-xs font-semibold">${t.title}</span>
+            <span class="${textColors[tip.level] || textColors.info} text-sm">${icons[tip.level] || 'ℹ'}</span>
+            <span class="text-slate-200 text-xs font-semibold">${tip.title}</span>
           </div>
-          <p class="text-slate-400 text-xs leading-relaxed">${t.detail}</p>
+          <p class="text-slate-400 text-xs leading-relaxed">${tip.detail}</p>
         </div>
       `).join('');
     }
@@ -383,8 +488,8 @@
 
       if (!prompts.length) {
         el.innerHTML = `<p class="text-slate-500 text-xs text-center py-8">
-          Nenhum prompt registrado ainda.<br>
-          Use a ferramenta MCP <code class="text-indigo-400">record_prompt</code> para rastrear.
+          ${t('no_prompts_yet')}<br>
+          ${t('use_mcp').replace('record_prompt', '<code class="text-indigo-400">record_prompt</code>')}
         </p>`;
         return;
       }
@@ -393,13 +498,13 @@
         <table class="w-full text-xs">
           <thead>
             <tr class="text-slate-500 border-b border-slate-700">
-              <th class="text-left pb-2 font-normal">Prompt</th>
-              <th class="text-left pb-2 font-normal">Projeto</th>
+              <th class="text-left pb-2 font-normal">${t('col_prompt')}</th>
+              <th class="text-left pb-2 font-normal">${t('col_project')}</th>
               <th class="text-right pb-2 font-normal">Input</th>
               <th class="text-right pb-2 font-normal">Output</th>
               <th class="text-right pb-2 font-normal">Cache</th>
-              <th class="text-right pb-2 font-normal">Custo</th>
-              <th class="text-right pb-2 font-normal">Data</th>
+              <th class="text-right pb-2 font-normal">${t('col_cost')}</th>
+              <th class="text-right pb-2 font-normal">${t('col_date')}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-800">
@@ -408,8 +513,8 @@
                 <td class="py-2 pr-3 prompt-cell" onclick="openModal(${JSON.stringify(p.prompt_preview || '')})">
                   ${p.prompt_preview
                     ? `<span class="prompt-text text-slate-300 block truncate">${sanitizePrompt(p.prompt_preview).substring(0, 80)}${p.prompt_preview.length > 80 ? '…' : ''}</span>`
-                    : '<em class="text-slate-600">sem preview</em>'}
-                  ${p.estimated ? '<span class="text-slate-600 text-xs" title="estimado">~</span>' : ''}
+                    : `<em class="text-slate-600">${t('no_preview')}</em>`}
+                  ${p.estimated ? '<span class="text-slate-600 text-xs" title="estimated">~</span>' : ''}
                 </td>
                 <td class="py-2 pr-3 text-slate-400">${p.project || '—'}</td>
                 <td class="py-2 pr-3 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>
@@ -429,7 +534,7 @@
       const el = document.getElementById('project-breakdown');
 
       if (!projects.length) {
-        el.innerHTML = '<p class="text-slate-500 text-xs text-center py-4">Sem dados por projeto. Use record_prompt para rastrear.</p>';
+        el.innerHTML = `<p class="text-slate-500 text-xs text-center py-4">${t('no_project_use')}</p>`;
         return;
       }
 
@@ -440,13 +545,13 @@
             const pct = maxTokens > 0 ? ((p.total_tokens || 0) / maxTokens * 100) : 0;
             return `
               <div class="flex items-center gap-3">
-                <span class="text-slate-300 text-xs w-48 truncate">${p.project || 'desconhecido'}</span>
+                <span class="text-slate-300 text-xs w-48 truncate">${p.project || t('unknown')}</span>
                 <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
                   <div class="h-full bg-indigo-500 rounded-full" style="width:${pct}%"></div>
                 </div>
                 <span class="text-slate-400 text-xs w-16 text-right">${fmtTokens(p.total_tokens)}</span>
                 <span class="text-amber-500 text-xs w-16 text-right">${fmtCost(p.cost)}</span>
-                <span class="text-slate-600 text-xs w-20 text-right">${p.prompt_count} prompts</span>
+                <span class="text-slate-600 text-xs w-20 text-right">${p.prompt_count} ${t('prompts_label')}</span>
               </div>
             `;
           }).join('')}
@@ -468,7 +573,7 @@
 
     async function syncAndRefresh() {
       const btn = document.getElementById('sync-btn');
-      btn.textContent = '↻ Sincronizando...';
+      btn.textContent = t('syncing');
       btn.disabled = true;
       const dot = document.getElementById('auto-dot');
       dot.className = 'inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse';
@@ -477,7 +582,7 @@
         await loadAll();
         resetCountdown();
       } finally {
-        btn.textContent = '↻ Sincronizar';
+        btn.textContent = t('sync');
         btn.disabled = false;
         dot.className = 'inline-block w-1.5 h-1.5 rounded-full bg-emerald-400';
         setTimeout(() => {
@@ -495,11 +600,11 @@
         loadProjects(),
         loadDaily(document.getElementById('days-select').value),
       ]);
+      const locale = LANG === 'pt' ? 'pt-BR' : 'en-US';
       document.getElementById('last-updated').textContent =
-        'atualizado ' + new Date().toLocaleTimeString('pt-BR');
+        t('updated') + ' ' + new Date().toLocaleTimeString(locale);
     }
 
-    // Auto-sync every 30s with countdown indicator
     function startAutoSync() {
       resetCountdown();
       countdownTimer = setInterval(async () => {
@@ -512,8 +617,31 @@
       }, 1000);
     }
 
+    applyLang();
     loadAll();
     startAutoSync();
+
+    // Update banner
+    let _appVersion = null;
+    async function checkVersion() {
+      try {
+        const r = await fetch('/api/version');
+        const { version } = await r.json();
+        if (_appVersion === null) { _appVersion = version; return; }
+        if (version !== _appVersion) {
+          document.getElementById('update-banner-text').textContent = t('new_version');
+          document.getElementById('update-banner-btn').textContent = t('update_btn');
+          document.getElementById('update-banner').classList.remove('hidden');
+        }
+      } catch {}
+    }
+    setInterval(checkVersion, 30000);
   </script>
+
+  <div id="update-banner" class="hidden fixed bottom-4 right-4 z-50 flex items-center gap-3 bg-indigo-600 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium">
+    <span id="update-banner-text">Nova versão disponível</span>
+    <button id="update-banner-btn" onclick="location.reload()" class="bg-white text-indigo-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-indigo-50 transition">Atualizar</button>
+    <button onclick="document.getElementById('update-banner').classList.add('hidden')" class="opacity-60 hover:opacity-100 text-lg leading-none">&times;</button>
+  </div>
 </body>
 </html>
