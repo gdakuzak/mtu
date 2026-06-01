@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.2] - 2026-06-01
+
+- feat: improve
+
 ## [0.1.1] - 2026-06-01
 
 - fix: graph and add language
