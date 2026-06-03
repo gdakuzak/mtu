@@ -1,68 +1,165 @@
 import json
 import os
+import urllib.request
+import urllib.error
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .db import get_conn, calc_cost, PRICING
 
 CLAUDE_DIR = Path(os.environ.get("MTU_CLAUDE_DIR", os.path.expanduser("~/.claude")))
 STATS_CACHE = CLAUDE_DIR / "stats-cache.json"
 HISTORY_JSONL = CLAUDE_DIR / "history.jsonl"
+CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
+
+
+def fetch_rate_limits() -> dict:
+    """Fetch current rate limit utilization from Anthropic API using Claude Code OAuth token."""
+    if not CREDENTIALS_FILE.exists():
+        return {"error": "credentials not found"}
+
+    try:
+        creds = json.loads(CREDENTIALS_FILE.read_text())
+        token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+        if not token:
+            return {"error": "no access token"}
+    except Exception:
+        return {"error": "failed to read credentials"}
+
+    payload = json.dumps({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 1,
+        "messages": [{"role": "user", "content": "x"}],
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            hdrs = dict(r.headers)
+    except urllib.error.HTTPError as e:
+        hdrs = dict(e.headers)
+    except Exception as ex:
+        return {"error": str(ex)}
+
+    def ts_to_iso(ts_str: str) -> str | None:
+        try:
+            return datetime.fromtimestamp(int(ts_str), tz=timezone.utc).isoformat()
+        except Exception:
+            return None
+
+    result = {
+        "status": hdrs.get("anthropic-ratelimit-unified-status"),
+        "representative_claim": hdrs.get("anthropic-ratelimit-unified-representative-claim"),
+        "session_5h": {
+            "utilization": float(hdrs.get("anthropic-ratelimit-unified-5h-utilization", 0)),
+            "status": hdrs.get("anthropic-ratelimit-unified-5h-status"),
+            "reset_ts": hdrs.get("anthropic-ratelimit-unified-5h-reset"),
+            "reset_iso": ts_to_iso(hdrs.get("anthropic-ratelimit-unified-5h-reset", "")),
+        },
+        "week_7d": {
+            "utilization": float(hdrs.get("anthropic-ratelimit-unified-7d-utilization", 0)),
+            "status": hdrs.get("anthropic-ratelimit-unified-7d-status"),
+            "reset_ts": hdrs.get("anthropic-ratelimit-unified-7d-reset"),
+            "reset_iso": ts_to_iso(hdrs.get("anthropic-ratelimit-unified-7d-reset", "")),
+        },
+        "fetched_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    return result
+
+
+def _read_transcripts() -> dict:
+    """Read all JSONL transcripts and aggregate real usage by (date, model)."""
+    projects_dir = CLAUDE_DIR / "projects"
+    if not projects_dir.exists():
+        return {}
+
+    # {(date, model): {input, output, cache_read, cache_create}}
+    daily: dict = {}
+
+    for jsonl_path in projects_dir.rglob("*.jsonl"):
+        try:
+            with open(jsonl_path) as f:
+                lines = [json.loads(l) for l in f if l.strip()]
+        except Exception:
+            continue
+
+        for line in lines:
+            msg = line.get("message", {})
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            usage = msg.get("usage")
+            if not usage:
+                continue
+            model = msg.get("model", "claude-sonnet-4-6")
+            ts = line.get("timestamp", "")
+            day = ts[:10] if ts else None
+            if not day:
+                continue
+
+            key = (day, model)
+            if key not in daily:
+                daily[key] = {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0}
+            daily[key]["input"] += usage.get("input_tokens", 0)
+            daily[key]["output"] += usage.get("output_tokens", 0)
+            daily[key]["cache_read"] += usage.get("cache_read_input_tokens", 0)
+            daily[key]["cache_create"] += usage.get("cache_creation_input_tokens", 0)
+
+    return daily
 
 
 def import_claude_stats() -> dict:
-    """Sync ~/.claude/stats-cache.json into daily_stats table."""
-    if not STATS_CACHE.exists():
-        return {"imported": 0, "error": "stats-cache.json not found"}
+    """Sync real usage from transcripts + activity metadata from stats-cache.json."""
+    daily_from_transcripts = _read_transcripts()
 
-    with open(STATS_CACHE) as f:
-        data = json.load(f)
+    activity_by_date: dict = {}
+    if STATS_CACHE.exists():
+        try:
+            with open(STATS_CACHE) as f:
+                data = json.load(f)
+            for d in data.get("dailyActivity", []):
+                activity_by_date[d["date"]] = d
+        except Exception:
+            pass
 
-    daily_activity = {d["date"]: d for d in data.get("dailyActivity", [])}
-    daily_tokens = data.get("dailyModelTokens", [])
-    model_usage = data.get("modelUsage", {})
+    if not daily_from_transcripts and not activity_by_date:
+        return {"imported": 0, "error": "no transcript or stats data found"}
 
     imported = 0
     with get_conn() as conn:
-        for day_entry in daily_tokens:
-            day = day_entry["date"]
-            activity = daily_activity.get(day, {})
-            for model, total_tokens in day_entry.get("tokensByModel", {}).items():
-                # Distribute lifetime cache ratio onto daily total as approximation
-                mu = model_usage.get(model, {})
-                lifetime_total = (
-                    mu.get("inputTokens", 0)
-                    + mu.get("outputTokens", 0)
-                    + mu.get("cacheReadInputTokens", 0)
-                    + mu.get("cacheCreationInputTokens", 0)
-                )
-                ratio = total_tokens / lifetime_total if lifetime_total > 0 else 0
-                approx_input = int(mu.get("inputTokens", 0) * ratio)
-                approx_output = int(mu.get("outputTokens", 0) * ratio)
-                approx_cache_read = int(mu.get("cacheReadInputTokens", 0) * ratio)
-                approx_cache_create = int(mu.get("cacheCreationInputTokens", 0) * ratio)
-                cost = calc_cost(model, approx_input, approx_output, approx_cache_read, approx_cache_create)
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO daily_stats
-                        (date, model, total_tokens, input_tokens, output_tokens,
-                         cache_read, cache_creation, message_count, session_count,
-                         tool_call_count, cost_usd)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        day, model, total_tokens,
-                        approx_input, approx_output,
-                        approx_cache_read, approx_cache_create,
-                        activity.get("messageCount", 0),
-                        activity.get("sessionCount", 0),
-                        activity.get("toolCallCount", 0),
-                        cost,
-                    ),
-                )
-                imported += 1
+        for (day, model), u in daily_from_transcripts.items():
+            total_tokens = u["input"] + u["output"] + u["cache_read"] + u["cache_create"]
+            cost = calc_cost(model, u["input"], u["output"], u["cache_read"], u["cache_create"])
+            activity = activity_by_date.get(day, {})
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO daily_stats
+                    (date, model, total_tokens, input_tokens, output_tokens,
+                     cache_read, cache_creation, message_count, session_count,
+                     tool_call_count, cost_usd)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    day, model, total_tokens,
+                    u["input"], u["output"], u["cache_read"], u["cache_create"],
+                    activity.get("messageCount", 0),
+                    activity.get("sessionCount", 0),
+                    activity.get("toolCallCount", 0),
+                    cost,
+                ),
+            )
+            imported += 1
 
-    last = daily_tokens[-1]["date"] if daily_tokens else None
+    last = max((d for d, _ in daily_from_transcripts), default=None)
     return {"imported": imported, "last_date": last}
 
 

@@ -111,8 +111,13 @@
             <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('cache_read_tokens')">
               Cache <span id="sort-cache_read_tokens" class="hidden"></span>
             </th>
-            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none" onclick="sortBy('cost_usd')">
-              <span data-i18n="col_cost">Custo</span> <span id="sort-cost_usd" class="hidden"></span>
+            <th class="text-right px-4 py-2.5 font-normal cursor-pointer hover:text-slate-300 select-none relative group" onclick="sortBy('cost_usd')">
+              <span data-i18n="col_cost">Custo</span>
+              <span class="text-amber-500 text-xs ml-0.5 cursor-help">⚠</span>
+              <span id="sort-cost_usd" class="hidden"></span>
+              <div class="absolute right-0 top-full mt-1 w-72 bg-slate-900 border border-amber-500/40 text-amber-200 text-xs rounded-lg p-3 shadow-xl z-50 hidden group-hover:block pointer-events-none text-left font-normal" data-i18n="cost_disclaimer">
+                ⚠ Previsão baseada nos preços públicos da API Anthropic. O valor real cobrado pelo provedor pode diferir conforme plano, descontos ou taxas adicionais.
+              </div>
             </th>
           </tr>
         </thead>
@@ -163,6 +168,7 @@
         col_project:     'Projeto',
         col_model:       'Modelo',
         col_cost:        'Custo',
+        cost_disclaimer: '⚠ Previsão baseada nos preços públicos da API Anthropic. O valor real cobrado pelo provedor pode diferir conforme plano, descontos ou taxas adicionais.',
         new_version:     'Nova versão disponível',
         update_btn:      'Atualizar',
       },
@@ -182,6 +188,7 @@
         col_project:     'Project',
         col_model:       'Model',
         col_cost:        'Cost',
+        cost_disclaimer: '⚠ Forecast based on Anthropic public API prices. Actual charges from your provider may differ by plan, discounts, or additional fees.',
         new_version:     'New version available',
         update_btn:      'Update',
       },
@@ -297,22 +304,28 @@
       return `/api/prompts/recent?${params}`;
     }
 
+    const PREVIEW_LIMIT = 80;
+
     function renderRow(p) {
       const preview = sanitize(p.prompt_preview || '');
       const modelLabel = MODEL_LABELS[p.model] || p.model;
       const modelColor = MODEL_COLORS[p.model] || 'bg-slate-700 text-slate-300';
       const hasPreview = preview.length > 0;
+      const previewShort = preview.length > PREVIEW_LIMIT
+        ? preview.substring(0, PREVIEW_LIMIT) + '…'
+        : preview;
+      const rowData = JSON.stringify({ preview, p });
       return `
-        <tr class="hover:bg-slate-800/40 transition-colors prompt-cell"
-            onclick='openModal(${JSON.stringify(preview)}, ${JSON.stringify(p)})'>
+        <tr class="hover:bg-slate-800/40 transition-colors prompt-cell cursor-pointer"
+            data-row="${rowData.replace(/"/g, '&quot;')}">
           <td class="px-4 py-2.5 text-slate-500 whitespace-nowrap">${fmtTs(p.timestamp)}</td>
           <td class="px-4 py-2.5 text-slate-400 max-w-[8rem] truncate">${p.project || '—'}</td>
           <td class="px-4 py-2.5">
             <span class="model-badge ${modelColor}">${modelLabel}</span>
           </td>
-          <td class="px-4 py-2.5 max-w-xs">
+          <td class="px-4 py-2.5 max-w-xs overflow-hidden">
             ${hasPreview
-              ? `<span class="preview-text text-slate-300 block truncate">${preview.substring(0, 80)}${preview.length > 80 ? '…' : ''}</span>`
+              ? `<span class="preview-text text-slate-300 block truncate" title="${previewShort}">${previewShort}</span>`
               : `<em class="text-slate-600">${t('no_preview')}</em>`}
           </td>
           <td class="px-4 py-2.5 text-right text-slate-300">${fmtTokens(p.input_tokens)}</td>
@@ -322,6 +335,13 @@
         </tr>
       `;
     }
+
+    document.getElementById('prompts-body').addEventListener('click', function(e) {
+      const row = e.target.closest('tr[data-row]');
+      if (!row) return;
+      const { preview, p } = JSON.parse(row.dataset.row);
+      openModal(preview, p);
+    });
 
     async function reload() {
       offset = 0;

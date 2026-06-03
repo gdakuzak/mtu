@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import os
 import subprocess
@@ -14,6 +15,7 @@ import uvicorn
 from ..db import init_db, get_conn, calc_cost
 from ..analyzer import (
     import_claude_stats,
+    fetch_rate_limits,
     get_daily_breakdown,
     get_project_breakdown,
     get_expensive_prompts,
@@ -53,11 +55,44 @@ def _compute_version() -> str:
 APP_VERSION = _compute_version()
 
 
+SYNC_INTERVAL = int(os.environ.get("MTU_SYNC_INTERVAL", "300"))  # seconds, default 5 min
+RATE_LIMIT_INTERVAL = int(os.environ.get("MTU_RATE_LIMIT_INTERVAL", "120"))  # seconds, default 2 min
+
+_rate_limit_cache: dict = {}
+
+
+async def _auto_sync_loop():
+    while True:
+        await asyncio.sleep(SYNC_INTERVAL)
+        try:
+            import_claude_stats()
+        except Exception:
+            pass
+
+
+async def _rate_limit_loop():
+    global _rate_limit_cache
+    while True:
+        try:
+            _rate_limit_cache = await asyncio.get_event_loop().run_in_executor(
+                None, fetch_rate_limits
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(RATE_LIMIT_INTERVAL)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _rate_limit_cache
     init_db()
     import_claude_stats()
+    _rate_limit_cache = await asyncio.get_event_loop().run_in_executor(None, fetch_rate_limits)
+    task1 = asyncio.create_task(_auto_sync_loop())
+    task2 = asyncio.create_task(_rate_limit_loop())
     yield
+    task1.cancel()
+    task2.cancel()
 
 
 app = FastAPI(title="MTU - Token Usage Monitor", lifespan=lifespan)
@@ -107,7 +142,7 @@ async def api_record(req: RecordRequest):
             VALUES (?,?,?,?,?,?,?,?,?,?,0)
             """,
             (
-                req.session_id, req.project, ts, req.prompt_preview[:300],
+                req.session_id, req.project, ts, req.prompt_preview[:2000],
                 req.input_tokens, req.output_tokens,
                 req.cache_read_tokens, req.cache_creation_tokens,
                 req.model, cost,
@@ -212,6 +247,36 @@ async def api_today():
         return d
 
     return get_today_summary()
+
+
+@app.get("/api/stats/week")
+async def api_week():
+    from datetime import timedelta
+    today = datetime.now().date()
+    week_start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) as messages,
+                   COUNT(DISTINCT session_id) as sessions,
+                   SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens) as total_tokens,
+                   SUM(cache_read_tokens) as cache_read,
+                   SUM(input_tokens) as input_tokens,
+                   SUM(cost_usd) as cost
+            FROM prompt_logs WHERE date(timestamp) >= ?
+            """,
+            (week_start,),
+        ).fetchone()
+    d = dict(row) if row else {}
+    d["week_start"] = week_start
+    cache_in = (d.get("input_tokens") or 0) + (d.get("cache_read") or 0)
+    d["cache_hit_rate"] = round((d.get("cache_read") or 0) / cache_in * 100 if cache_in > 0 else 0, 1)
+    return d
+
+
+@app.get("/api/stats/rate-limits")
+async def api_rate_limits():
+    return _rate_limit_cache
 
 
 @app.get("/api/stats/cache")

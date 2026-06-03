@@ -97,15 +97,30 @@
         <div id="stat-cache-rate" class="stat-value text-2xl font-bold text-emerald-400">—</div>
         <div class="text-slate-500 text-xs mt-1">lifetime</div>
       </div>
-      <div class="card p-4">
-        <div class="text-slate-400 text-xs mb-1" data-i18n="cost_today">Custo estimado hoje</div>
+      <div class="card p-4 relative group">
+        <div class="flex items-center gap-1 mb-1">
+          <div class="text-slate-400 text-xs" data-i18n="cost_today">Custo estimado hoje</div>
+          <span class="text-amber-500 text-xs cursor-help" title="">⚠</span>
+        </div>
         <div id="stat-cost" class="stat-value text-2xl font-bold text-amber-400">—</div>
         <div class="text-slate-500 text-xs mt-1" data-i18n="based_on_pricing">baseado em API pricing</div>
+        <div class="absolute top-full left-0 mt-2 w-72 bg-slate-900 border border-amber-500/40 text-amber-200 text-xs rounded-lg p-3 shadow-xl z-50 hidden group-hover:block pointer-events-none" data-i18n-html="cost_disclaimer"></div>
       </div>
       <div class="card p-4">
         <div class="text-slate-400 text-xs mb-1" data-i18n="sessions_today">Sessões hoje</div>
         <div id="stat-sessions" class="stat-value text-2xl font-bold text-indigo-400">—</div>
         <div id="stat-budget" class="text-slate-500 text-xs mt-1"></div>
+      </div>
+    </div>
+
+    <!-- Claude Rate Limits -->
+    <div class="card p-4" id="rate-limits-card">
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-slate-400 text-xs font-semibold tracking-wide" data-i18n="rate_limits_title">Limites Claude (plano)</div>
+        <span id="rate-limits-updated" class="text-slate-600 text-xs"></span>
+      </div>
+      <div class="space-y-4" id="rate-limits-body">
+        <div class="text-slate-600 text-xs" data-i18n="rate_limits_loading">Carregando limites…</div>
       </div>
     </div>
 
@@ -211,6 +226,18 @@
         sync_cache:       'Sincronize para ver stats de cache.',
         no_project_use:   'Sem dados por projeto. Use record_prompt para rastrear.',
         prompts_label:    'prompts',
+        cost_disclaimer:  '⚠ Previsão baseada nos preços públicos da API Anthropic. O valor real cobrado pelo provedor pode diferir conforme plano, descontos ou taxas adicionais.',
+        rate_limits_title:  'Limites Claude (plano)',
+        rate_limits_loading:'Carregando limites…',
+        rate_limits_unavail:'Não foi possível obter limites.',
+        rl_session:         'Sessão atual (5h)',
+        rl_week:            'Semana atual (7d)',
+        rl_resets:          'Renova',
+        week_summary:     'Esta semana',
+        week_tokens:      'Tokens',
+        week_sessions:    'Sessões',
+        week_messages:    'Mensagens',
+        week_cost:        'Custo est.',
       },
       en: {
         sync:             '↻ Sync',
@@ -248,6 +275,18 @@
         sync_cache:       'Sync to see cache stats.',
         no_project_use:   'No project data. Use record_prompt to track.',
         prompts_label:    'prompts',
+        cost_disclaimer:  '⚠ Forecast based on Anthropic public API prices. Actual charges from your provider may differ by plan, discounts, or additional fees.',
+        rate_limits_title:  'Claude limits (plan)',
+        rate_limits_loading:'Loading limits…',
+        rate_limits_unavail:'Could not fetch limits.',
+        rl_session:         'Current session (5h)',
+        rl_week:            'Current week (7d)',
+        rl_resets:          'Resets',
+        week_summary:     'This week',
+        week_tokens:      'Tokens',
+        week_sessions:    'Sessions',
+        week_messages:    'Messages',
+        week_cost:        'Est. cost',
       },
     };
 
@@ -261,12 +300,10 @@
       document.documentElement.lang = LANG === 'pt' ? 'pt-BR' : 'en';
       document.getElementById('lang-btn').textContent = LANG === 'pt' ? 'EN' : 'PT';
       document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.dataset.i18n;
-        if (el.tagName === 'OPTION') {
-          el.textContent = t(key);
-        } else {
-          el.textContent = t(key);
-        }
+        el.textContent = t(el.dataset.i18n);
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        el.textContent = t(el.dataset.i18nHtml);
       });
     }
 
@@ -333,6 +370,67 @@
       } else {
         document.getElementById('stat-budget').textContent = t('no_limit');
       }
+    }
+
+    async function loadRateLimits() {
+      const rl = await fetch('/api/stats/rate-limits').then(r => r.json());
+      const body = document.getElementById('rate-limits-body');
+      if (rl.error || !rl.session_5h) {
+        body.innerHTML = `<div class="text-slate-600 text-xs">${rl.error || t('rate_limits_unavail')}</div>`;
+        return;
+      }
+
+      function fmtReset(isoStr) {
+        if (!isoStr) return '—';
+        const d = new Date(isoStr);
+        const locale = LANG === 'pt' ? 'pt-BR' : 'en-US';
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        return d.toLocaleString(locale, { timeZone: tz, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+
+      function progressBar(pct, color) {
+        const w = Math.min(100, Math.round(pct * 100));
+        const barColor = pct >= 0.9 ? 'bg-red-500' : pct >= 0.7 ? 'bg-amber-500' : color;
+        return `
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div class="${barColor} h-full rounded-full transition-all" style="width:${w}%"></div>
+            </div>
+            <span class="text-xs font-mono w-10 text-right ${pct >= 0.9 ? 'text-red-400' : pct >= 0.7 ? 'text-amber-400' : 'text-slate-300'}">${w}%</span>
+          </div>`;
+      }
+
+      const s = rl.session_5h;
+      const w = rl.week_7d;
+      body.innerHTML = `
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-slate-400 text-xs" data-i18n="rl_session">${t('rl_session')}</span>
+            <span class="text-slate-600 text-xs">${t('rl_resets')} ${fmtReset(s.reset_iso)}</span>
+          </div>
+          ${progressBar(s.utilization, 'bg-indigo-500')}
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-slate-400 text-xs" data-i18n="rl_week">${t('rl_week')}</span>
+            <span class="text-slate-600 text-xs">${t('rl_resets')} ${fmtReset(w.reset_iso)}</span>
+          </div>
+          ${progressBar(w.utilization, 'bg-emerald-500')}
+        </div>`;
+
+      if (rl.fetched_at) {
+        const locale = LANG === 'pt' ? 'pt-BR' : 'en-US';
+        document.getElementById('rate-limits-updated').textContent =
+          t('updated') + ' ' + new Date(rl.fetched_at).toLocaleTimeString(locale);
+      }
+    }
+
+    async function loadWeek() {
+      const w = await fetch('/api/stats/week').then(r => r.json());
+      document.getElementById('week-tokens').textContent = fmtTokens(w.total_tokens) || '—';
+      document.getElementById('week-sessions').textContent = w.sessions || '0';
+      document.getElementById('week-messages').textContent = w.messages || '0';
+      document.getElementById('week-cost').textContent = fmtCost(w.cost) || '—';
     }
 
     async function loadCache() {
@@ -594,6 +692,7 @@
     async function loadAll() {
       await Promise.all([
         loadToday(),
+        loadRateLimits(),
         loadCache(),
         loadTips(),
         loadExpensive(),

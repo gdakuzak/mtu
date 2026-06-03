@@ -59,7 +59,35 @@ def main():
     cache_read = usage.get("cache_read_input_tokens", 0)
     cache_creation = usage.get("cache_creation_input_tokens", 0)
 
-    # Achar último user message com texto real (pula tool_result puro)
+    def extract_content(content):
+        """Returns (text, has_image) from message content."""
+        if isinstance(content, str):
+            return content.strip(), False
+        if isinstance(content, list):
+            texts, has_image = [], False
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type", "")
+                if btype == "text":
+                    t = block.get("text", "").strip()
+                    if t:
+                        texts.append(t)
+                elif btype == "image":
+                    has_image = True
+            return " ".join(texts), has_image
+        return "", False
+
+    def build_preview(content):
+        text, has_image = extract_content(content)
+        if text:
+            prefix = "[Imagem] " if has_image else ""
+            return sanitize((prefix + text)[:2000])
+        if has_image:
+            return "[Imagem]"
+        return ""
+
+    # Achar último user message com texto real antes do assistant (pula tool_result puro)
     prompt_preview = ""
     past_assistant = False
     for line in reversed(lines):
@@ -71,20 +99,21 @@ def main():
         msg_inner = line.get("message", {})
         if not isinstance(msg_inner, dict) or msg_inner.get("role") != "user":
             continue
-        content = msg_inner.get("content", "")
-        if isinstance(content, str) and content.strip():
-            prompt_preview = sanitize(content[:300])
+        preview = build_preview(msg_inner.get("content", ""))
+        if preview:
+            prompt_preview = preview
             break
-        elif isinstance(content, list):
-            text = next(
-                (block.get("text", "") for block in content
-                 if isinstance(block, dict) and block.get("type") == "text"),
-                "",
-            )
-            if text.strip():
-                prompt_preview = sanitize(text[:300])
+
+    # Fallback: qualquer user message no transcript
+    if not prompt_preview:
+        for line in reversed(lines):
+            msg_inner = line.get("message", {})
+            if not isinstance(msg_inner, dict) or msg_inner.get("role") != "user":
+                continue
+            preview = build_preview(msg_inner.get("content", ""))
+            if preview:
+                prompt_preview = preview
                 break
-            # só tool_result — continua procurando
 
     project = os.path.basename(cwd.rstrip("/"))
 
