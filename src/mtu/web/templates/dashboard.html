@@ -438,17 +438,43 @@
       const el = document.getElementById('cache-stats');
       el.innerHTML = '';
 
-      const models = {
+      const modelLabels = {
+        'gpt-5.5': 'GPT-5.5',
+        'gpt-5.5-codex': 'GPT-5.5 Codex',
+        'gpt-5.4': 'GPT-5.4',
+        'gpt-5.3-codex': 'GPT-5.3 Codex',
+        'gpt-5.3-codex-spark': 'GPT-5.3 Codex Spark',
         'claude-sonnet-4-6': 'Sonnet 4.6',
         'claude-haiku-4-5-20251001': 'Haiku 4.5',
         'claude-opus-4-7': 'Opus 4.7',
       };
 
+      function isCodexModel(model) {
+        return typeof model === 'string' && model.toLowerCase().includes('codex');
+      }
+
+      function formatModelLabel(model) {
+        if (modelLabels[model]) return modelLabels[model];
+        if (!model) return t('unknown');
+
+        return model
+          .split('-')
+          .map((part) => {
+            const p = part.toLowerCase();
+            if (p === 'gpt') return 'GPT';
+            if (p === 'claude') return 'Claude';
+            if (p === 'codex') return 'Codex';
+            if (p === 'haiku' || p === 'opus' || p === 'sonnet') return part.charAt(0).toUpperCase() + part.slice(1);
+            return part;
+          })
+          .join(' ');
+      }
+
       let hasData = false;
       for (const [model, stats] of Object.entries(cache)) {
         if (!stats.total_tokens) continue;
         hasData = true;
-        const name = models[model] || model;
+        const name = formatModelLabel(model);
         const rate = stats.cache_hit_rate;
         const rateColor = rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400';
         const barWidth = Math.min(100, rate);

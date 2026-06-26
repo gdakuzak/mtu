@@ -5,7 +5,7 @@ import urllib.error
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-from .db import get_conn, calc_cost, PRICING
+from .db import DEFAULT_MODEL, get_conn, calc_cost, normalize_model
 
 CLAUDE_DIR = Path(os.environ.get("MTU_CLAUDE_DIR", os.path.expanduser("~/.claude")))
 STATS_CACHE = CLAUDE_DIR / "stats-cache.json"
@@ -100,7 +100,7 @@ def _read_transcripts() -> dict:
             usage = msg.get("usage")
             if not usage:
                 continue
-            model = msg.get("model", "claude-sonnet-4-6")
+            model = normalize_model(msg.get("model", DEFAULT_MODEL))
             ts = line.get("timestamp", "")
             day = ts[:10] if ts else None
             if not day:

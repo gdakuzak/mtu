@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 
-from .db import init_db, get_conn, calc_cost
+from .db import DEFAULT_MODEL, init_db, get_conn, calc_cost
 from .analyzer import (
     import_claude_stats,
     get_daily_breakdown,
@@ -26,7 +26,7 @@ def record_prompt(
     output_tokens: int,
     cache_read_tokens: int = 0,
     cache_creation_tokens: int = 0,
-    model: str = "claude-sonnet-4-6",
+    model: str = DEFAULT_MODEL,
     estimated: bool = False,
 ) -> dict:
     """
@@ -39,7 +39,11 @@ def record_prompt(
     - cache_creation_tokens: tokens gravados no cache
     - estimated: True se os valores são estimados (não exatos)
     """
-    cost = calc_cost(model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens)
+    selected_model = model.strip() if isinstance(model, str) else DEFAULT_MODEL
+    if not selected_model:
+        selected_model = DEFAULT_MODEL
+
+    cost = calc_cost(selected_model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens)
     with get_conn() as conn:
         conn.execute(
             """
@@ -52,7 +56,7 @@ def record_prompt(
                 session_id, project, prompt_preview[:300],
                 input_tokens, output_tokens,
                 cache_read_tokens, cache_creation_tokens,
-                model, cost, int(estimated),
+                selected_model, cost, int(estimated),
             ),
         )
     total = input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens

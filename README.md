@@ -14,7 +14,7 @@
 | **T** — Token Analytics | Análise profunda de métricas de prompt, completion e por modelo. |
 | **U** — Usage Guardrails | Defina orçamentos rígidos, alertas automáticos e evite surpresas na fatura da API. |
 
-Rastreia tokens por prompt, calcula custo estimado e sugere otimizações. Integra com Claude Code via MCP + hook automático.
+Rastreia tokens por prompt, calcula custo estimado e sugere otimizações. Integra com Claude Code e Codex via MCP; no Claude Code também há hook automático para captura exata por resposta.
 
 > [!WARNING]
 > **Repositório em construção.** Release pública em breve.
@@ -23,9 +23,16 @@ Rastreia tokens por prompt, calcula custo estimado e sugere otimizações. Integ
 
 - Python 3.11+
 - Docker + Docker Compose
-- Claude Code CLI
+- Claude Code CLI e/ou Codex CLI
 
 ---
+
+## Clientes suportados
+
+| Cliente | MCP | Registro automático | Observação |
+|---------|-----|---------------------|------------|
+| Claude Code | Sim | Sim, via hook `Stop` | Captura tokens reais do transcript JSONL. |
+| Codex | Sim | Experimental, via hook `Stop` | Caminho recomendado hoje: usar MCP e `record_prompt`; hooks do Codex podem ser configurados em `~/.codex/hooks.json` ou `~/.codex/config.toml`. |
 
 ## Instalação rápida
 
@@ -43,13 +50,19 @@ uv venv && uv pip install -e .
 docker compose up -d
 ```
 
+Modelo padrão configurado no Docker: `MTU_DEFAULT_MODEL=gpt-5.5`. Altere essa variável no `docker-compose.yml` se quiser usar outro modelo como padrão para registros manuais/estimados.
+
 | Serviço | URL | Descrição |
 |---------|-----|-----------|
 | Dashboard | http://localhost:7799 | Gráficos, cache stats e otimizações |
 | Prompts | http://localhost:7799/prompts | Histórico de prompts com filtros e ordenação |
 | SQLite UI | http://localhost:7800 | Browse/query direto no banco |
 
-### 3. Registrar MCP globalmente (todos os projetos)
+### 3. Registrar MCP globalmente
+
+Escolha o cliente que vai usar. Pode configurar os dois apontando para a mesma instalação do MTU.
+
+#### Claude Code
 
 ```bash
 claude mcp add \
@@ -65,7 +78,39 @@ Substituir `/caminho/para/mtu` pelo diretório onde clonou.
 
 Verificar: `claude mcp list` — deve mostrar `mtu: ✓ Connected`.
 
-### 4. Adicionar hook Stop (registro automático por prompt)
+#### Codex
+
+Via CLI:
+
+```bash
+codex mcp add mtu \
+  --env "PYTHONPATH=/caminho/para/mtu/src" \
+  -- \
+  /caminho/para/mtu/.venv/bin/python \
+  -m mtu.server
+```
+
+Ou edite `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mtu]
+command = "/caminho/para/mtu/.venv/bin/python"
+args = ["-m", "mtu.server"]
+
+[mcp_servers.mtu.env]
+PYTHONPATH = "/caminho/para/mtu/src"
+```
+
+Substituir `/caminho/para/mtu` pelo diretório onde clonou.
+
+Verificar no Codex: use `/mcp` na TUI ou `codex mcp --help` para comandos disponíveis.
+
+> [!NOTE]
+> Não versione arquivos de configuração MCP com caminhos locais, como `.mcp.json`, quando eles apontarem para `/caminho/para/mtu` ou para a sua home. Cada pessoa deve configurar o MCP no próprio ambiente via `claude mcp add`, `codex mcp add` ou `~/.codex/config.toml`.
+
+### 4. Adicionar hook Stop
+
+#### Claude Code
 
 Adicionar em `~/.claude/settings.json`:
 
@@ -89,6 +134,30 @@ Adicionar em `~/.claude/settings.json`:
 ```
 
 Após isso, **cada resposta do Claude é registrada automaticamente** — tokens reais lidos do transcript da sessão, sem configuração adicional.
+
+#### Codex
+
+Codex também suporta hooks `Stop`. Para testar o mesmo hook do MTU, adicione em `~/.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /caminho/para/mtu/hooks/mtu-record-prompt.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Importante: o hook atual foi criado para o payload/transcript do Claude Code. No Codex, se o evento `Stop` não fornecer `transcript_path` compatível, o script encerra silenciosamente sem registrar. Nesse caso, use o MCP `record_prompt` como registro manual/estimado até existir um hook Codex dedicado.
 
 ---
 
@@ -115,7 +184,7 @@ Intervalo de update configurável via `MTU_UPDATE_DAYS` (default: 7 dias). Só r
 
 ## O que é registrado
 
-Cada turn captura via transcript JSONL da sessão:
+No Claude Code, cada turn captura via transcript JSONL da sessão:
 
 | Campo | Fonte |
 | ------- | ------- |
@@ -126,6 +195,8 @@ Cada turn captura via transcript JSONL da sessão:
 | `model` | `message.model` |
 | `prompt_preview` | Último user message com texto real (300 chars, pula tool_results) |
 | `project` | `basename(cwd)` |
+
+No Codex, o caminho seguro é registrar via MCP `record_prompt`. Use `estimated=true` quando os valores não vierem de uma fonte exata.
 
 ---
 
@@ -169,7 +240,7 @@ Quando o hook detecta padrões problemáticos, imprime na sessão:
 
 | Tool | Descrição |
 | ------ | ----------- |
-| `record_prompt` | Registra manualmente uso de tokens de um prompt |
+| `record_prompt` | Registra manualmente uso de tokens de um prompt; caminho principal para Codex |
 | `get_usage_report` | Relatório N dias com cache stats |
 | `get_top_expensive_prompts` | Prompts mais caros em tokens |
 | `get_project_stats` | Breakdown por projeto |

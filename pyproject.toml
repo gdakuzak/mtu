@@ -1,7 +1,7 @@
 [project]
 name = "mtu"
 version = "0.1.2"
-description = "MTU - Monitor de Uso de Tokens para Claude Code"
+description = "MTU - Monitor de Uso de Tokens para Claude Code e Codex"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.9.0",

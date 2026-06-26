@@ -1,10 +1,32 @@
 import sqlite3
 import os
+import re
 from pathlib import Path
 
 DB_PATH = Path(os.environ.get("MTU_DB_PATH", os.path.expanduser("~/.claude/mtu.db")))
+DEFAULT_MODEL = os.environ.get("MTU_DEFAULT_MODEL", "gpt-5.5")
 
 PRICING = {
+    "gpt-5.5": {
+        "input": 5.0e-6, "output": 30.0e-6,
+        "cache_read": 0.5e-6, "cache_creation": 5.0e-6,
+    },
+    "gpt-5.5-codex": {
+        "input": 5.0e-6, "output": 30.0e-6,
+        "cache_read": 0.5e-6, "cache_creation": 5.0e-6,
+    },
+    "gpt-5.4": {
+        "input": 2.5e-6, "output": 15.0e-6,
+        "cache_read": 0.25e-6, "cache_creation": 2.5e-6,
+    },
+    "gpt-5.3-codex": {
+        "input": 1.75e-6, "output": 14.0e-6,
+        "cache_read": 0.175e-6, "cache_creation": 1.75e-6,
+    },
+    "gpt-5.3-codex-spark": {
+        "input": 1.75e-6, "output": 14.0e-6,
+        "cache_read": 0.175e-6, "cache_creation": 1.75e-6,
+    },
     "claude-sonnet-4-6": {
         "input": 3.0e-6, "output": 15.0e-6,
         "cache_read": 0.3e-6, "cache_creation": 3.75e-6,
@@ -19,11 +41,37 @@ PRICING = {
     },
 }
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+
+MODEL_ALIASES = {
+    "gpt-5.3-codex-spark": "gpt-5.3-codex",
+}
+
+
+def normalize_model(model: str) -> str:
+    normalized_model = MODEL_ALIASES.get(model, model)
+    if normalized_model in PRICING:
+        return normalized_model
+
+    lowered = (normalized_model or "").strip().lower()
+    if "-codex" in lowered:
+        m = re.match(r"^gpt-(\d+\.\d+)", lowered)
+        if m:
+            candidate = f"gpt-{m.group(1)}-codex"
+            if candidate in PRICING:
+                return candidate
+        # fallback de segurança para qualquer variação de codex
+        if "5.5" in lowered and "gpt-5.5-codex" in PRICING:
+            return "gpt-5.5-codex"
+        if "5.3" in lowered and "gpt-5.3-codex" in PRICING:
+            return "gpt-5.3-codex"
+        return "gpt-5.3-codex"
+
+    return normalized_model
 
 
 def calc_cost(model: str, input_t: int, output_t: int, cache_read: int = 0, cache_create: int = 0) -> float:
-    p = PRICING.get(model, PRICING[DEFAULT_MODEL])
+    normalized_model = normalize_model(model)
+    p = PRICING.get(normalized_model, PRICING[DEFAULT_MODEL])
     return (
         input_t * p["input"]
         + output_t * p["output"]
@@ -36,7 +84,8 @@ def get_conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -53,7 +102,7 @@ def init_db() -> None:
             output_tokens        INTEGER DEFAULT 0,
             cache_read_tokens    INTEGER DEFAULT 0,
             cache_creation_tokens INTEGER DEFAULT 0,
-            model                TEXT    DEFAULT 'claude-sonnet-4-6',
+            model                TEXT    DEFAULT 'gpt-5.5',
             cost_usd             REAL    DEFAULT 0,
             estimated            INTEGER DEFAULT 0
         );
