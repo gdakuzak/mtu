@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -11,6 +12,9 @@ CLAUDE_DIR = Path(os.environ.get("MTU_CLAUDE_DIR", os.path.expanduser("~/.claude
 STATS_CACHE = CLAUDE_DIR / "stats-cache.json"
 HISTORY_JSONL = CLAUDE_DIR / "history.jsonl"
 CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
+
+CODEX_DIR = Path(os.environ.get("MTU_CODEX_DIR", os.path.expanduser("~/.codex")))
+CODEX_SESSIONS_DIR = CODEX_DIR / "sessions"
 
 
 def fetch_rate_limits() -> dict:
@@ -161,6 +165,191 @@ def import_claude_stats() -> dict:
 
     last = max((d for d, _ in daily_from_transcripts), default=None)
     return {"imported": imported, "last_date": last}
+
+
+def _extract_codex_text(content) -> str:
+    if isinstance(content, str):
+        text = content.strip()
+        return "" if _is_codex_injected_text(text) else _normalize_codex_user_text(text)
+    if not isinstance(content, list):
+        return ""
+
+    texts = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        text = block.get("text")
+        if isinstance(text, str) and text.strip():
+            cleaned = text.strip()
+            if not _is_codex_injected_text(cleaned):
+                texts.append(_normalize_codex_user_text(cleaned))
+
+    # Codex user messages can include large injected context before the real
+    # request. The last text block is usually the user's visible prompt.
+    return texts[-1] if texts else ""
+
+
+def _is_codex_injected_text(text: str) -> bool:
+    stripped = text.lstrip()
+    return stripped.startswith((
+        "<skill>",
+        "<environment_context>",
+        "<permissions instructions>",
+        "<collaboration_mode>",
+        "<skills_instructions>",
+        "<plugins_instructions>",
+    ))
+
+
+def _normalize_codex_user_text(text: str) -> str:
+    marker = "## My request for Codex:"
+    if marker in text:
+        return text.split(marker, 1)[1].strip()
+    return text
+
+
+def _is_bad_codex_preview(text: str) -> bool:
+    stripped = text.lstrip()
+    return _is_codex_injected_text(stripped) or stripped.startswith("# Context from my IDE setup:")
+
+
+def _sanitize_preview(text: str, limit: int = 2000) -> str:
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    return cleaned[:limit]
+
+
+def import_codex_stats() -> dict:
+    """Import per-turn Codex token usage from ~/.codex/sessions JSONL files."""
+    if not CODEX_SESSIONS_DIR.exists():
+        return {"imported": 0, "skipped": 0, "error": "codex sessions dir not found"}
+
+    imported = 0
+    skipped = 0
+    scanned_files = 0
+    last_timestamp = None
+
+    with get_conn() as conn:
+        for jsonl_path in CODEX_SESSIONS_DIR.rglob("*.jsonl"):
+            scanned_files += 1
+            try:
+                lines = [json.loads(l) for l in jsonl_path.read_text().splitlines() if l.strip()]
+            except Exception:
+                skipped += 1
+                continue
+
+            session_id = jsonl_path.stem
+            cwd = ""
+            model = DEFAULT_MODEL
+            prompt_preview = ""
+
+            for line in lines:
+                line_type = line.get("type")
+                payload = line.get("payload") if isinstance(line.get("payload"), dict) else {}
+
+                if line_type == "session_meta":
+                    session_id = payload.get("session_id") or payload.get("id") or session_id
+                    cwd = payload.get("cwd") or cwd
+                    if payload.get("model"):
+                        model = payload["model"]
+                    continue
+
+                if line_type == "turn_context":
+                    cwd = payload.get("cwd") or cwd
+                    if payload.get("model"):
+                        model = payload["model"]
+                    continue
+
+                if line_type == "response_item":
+                    if payload.get("type") == "message" and payload.get("role") == "user":
+                        preview = _extract_codex_text(payload.get("content"))
+                        if preview:
+                            prompt_preview = _sanitize_preview(preview)
+                    if payload.get("model"):
+                        model = payload["model"]
+                    continue
+
+                if line_type != "event_msg" or payload.get("type") != "token_count":
+                    continue
+
+                usage = (payload.get("info") or {}).get("last_token_usage") or {}
+                if not usage:
+                    continue
+
+                timestamp = line.get("timestamp") or datetime.now().isoformat()
+                selected_model = normalize_model(model or DEFAULT_MODEL)
+                cache_read = int(usage.get("cached_input_tokens") or 0)
+                input_total = int(usage.get("input_tokens") or 0)
+                input_tokens = max(0, input_total - cache_read)
+                output_tokens = int(usage.get("output_tokens") or 0)
+                cache_creation = int(usage.get("cache_creation_input_tokens") or 0)
+                if input_tokens + output_tokens + cache_read + cache_creation == 0:
+                    skipped += 1
+                    continue
+                project = os.path.basename(cwd.rstrip("/")) if cwd else ""
+
+                exists = conn.execute(
+                    """
+                    SELECT id, prompt_preview FROM prompt_logs
+                    WHERE session_id = ? AND timestamp = ? AND model = ?
+                    LIMIT 1
+                    """,
+                    (session_id, timestamp, selected_model),
+                ).fetchone()
+                if exists:
+                    existing_preview = exists["prompt_preview"] or ""
+                    if prompt_preview and (not existing_preview or _is_bad_codex_preview(existing_preview)):
+                        conn.execute(
+                            "UPDATE prompt_logs SET prompt_preview = ? WHERE id = ?",
+                            (prompt_preview, exists["id"]),
+                        )
+                    skipped += 1
+                    continue
+
+                cost = calc_cost(
+                    selected_model,
+                    input_tokens,
+                    output_tokens,
+                    cache_read,
+                    cache_creation,
+                )
+                conn.execute(
+                    """
+                    INSERT INTO prompt_logs
+                        (session_id, project, timestamp, prompt_preview,
+                         input_tokens, output_tokens, cache_read_tokens,
+                         cache_creation_tokens, model, cost_usd, estimated)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,0)
+                    """,
+                    (
+                        session_id,
+                        project,
+                        timestamp,
+                        prompt_preview,
+                        input_tokens,
+                        output_tokens,
+                        cache_read,
+                        cache_creation,
+                        selected_model,
+                        cost,
+                    ),
+                )
+                imported += 1
+                last_timestamp = timestamp if last_timestamp is None else max(last_timestamp, timestamp)
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "scanned_files": scanned_files,
+        "last_timestamp": last_timestamp,
+    }
+
+
+def import_all_stats() -> dict:
+    """Sync every supported local source."""
+    return {
+        "claude": import_claude_stats(),
+        "codex": import_codex_stats(),
+    }
 
 
 def get_daily_breakdown(days: int = 14) -> list[dict]:

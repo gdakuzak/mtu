@@ -14,6 +14,7 @@ import uvicorn
 
 from ..db import DEFAULT_MODEL, init_db, get_conn, calc_cost
 from ..analyzer import (
+    import_all_stats,
     import_claude_stats,
     fetch_rate_limits,
     get_daily_breakdown,
@@ -65,7 +66,7 @@ async def _auto_sync_loop():
     while True:
         await asyncio.sleep(SYNC_INTERVAL)
         try:
-            import_claude_stats()
+            import_all_stats()
         except Exception:
             pass
 
@@ -86,7 +87,7 @@ async def _rate_limit_loop():
 async def lifespan(app: FastAPI):
     global _rate_limit_cache
     init_db()
-    import_claude_stats()
+    import_all_stats()
     _rate_limit_cache = await asyncio.get_event_loop().run_in_executor(None, fetch_rate_limits)
     task1 = asyncio.create_task(_auto_sync_loop())
     task2 = asyncio.create_task(_rate_limit_loop())
@@ -404,7 +405,7 @@ async def api_budget(project: str | None = None):
 
 @app.post("/api/sync")
 async def api_sync():
-    return import_claude_stats()
+    return import_all_stats()
 
 
 def main():
