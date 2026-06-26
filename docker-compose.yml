@@ -6,9 +6,11 @@ services:
       - "127.0.0.1:7799:7799"
     volumes:
       - "${HOME}/.claude:/claude-data:rw"
+      - "${HOME}/.codex:/codex-data:ro"
     environment:
       - MTU_DB_PATH=/claude-data/mtu.db
       - MTU_CLAUDE_DIR=/claude-data
+      - MTU_CODEX_DIR=/codex-data
       - MTU_DEFAULT_MODEL=gpt-5.5
     restart: unless-stopped
     healthcheck:

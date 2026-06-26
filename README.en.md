@@ -32,7 +32,7 @@ Tracks tokens per prompt, calculates estimated cost, and suggests optimizations.
 | Client | MCP | Automatic recording | Notes |
 |--------|-----|---------------------|-------|
 | Claude Code | Yes | Yes, via `Stop` hook | Captures real tokens from the JSONL transcript. |
-| Codex | Yes | Experimental, via `Stop` hook | Recommended path today: use MCP and `record_prompt`; Codex hooks can be configured in `~/.codex/hooks.json` or `~/.codex/config.toml`. |
+| Codex | Yes | Yes, via `~/.codex/sessions` sync | Captures real tokens from Codex JSONL transcripts by workspace. The `Stop` hook remains optional/experimental. |
 
 ## Quick Install
 
@@ -51,6 +51,8 @@ docker compose up -d
 ```
 
 Default model configured in Docker: `MTU_DEFAULT_MODEL=gpt-5.5`. Change this variable in `docker-compose.yml` if you want another default model for manual/estimated records.
+
+Docker mounts `~/.claude` for the SQLite database and `~/.codex` read-only to import Codex transcripts.
 
 | Service | URL | Description |
 |---------|-----|-------------|
@@ -157,7 +159,7 @@ Codex also supports `Stop` hooks. To test the same MTU hook, add this to `~/.cod
 }
 ```
 
-Important: the current hook was built for the Claude Code payload/transcript. In Codex, if the `Stop` event does not provide a compatible `transcript_path`, the script exits silently without recording. In that case, use the `record_prompt` MCP tool for manual/estimated recording until a dedicated Codex hook exists.
+Important: the current hook was built for the Claude Code payload/transcript. In Codex, the recommended path is MTU's native sync, which reads `~/.codex/sessions/**/*.jsonl`. The `Stop` hook can remain configured, but it is optional and may exit silently if the event does not provide a compatible `transcript_path`.
 
 ---
 
@@ -196,7 +198,16 @@ In Claude Code, each turn is captured from the session JSONL transcript:
 | `prompt_preview` | Last user message with real text (300 chars, skips tool_results) |
 | `project` | `basename(cwd)` |
 
-In Codex, the safe path is recording through the `record_prompt` MCP tool. Use `estimated=true` when values do not come from an exact source.
+In Codex, each turn is imported from `~/.codex/sessions/**/*.jsonl` during MCP/web startup, dashboard auto-sync, and the `/api/sync` endpoint:
+
+| Field | Source |
+| ------- | ------- |
+| `input_tokens` | `last_token_usage.input_tokens - cached_input_tokens` |
+| `output_tokens` | `last_token_usage.output_tokens` |
+| `cache_read_tokens` | `last_token_usage.cached_input_tokens` |
+| `model` | `turn_context.model` or default model |
+| `prompt_preview` | Last user message before the token count |
+| `project` | `basename(cwd)` |
 
 ---
 
@@ -240,12 +251,14 @@ When the hook detects problematic patterns, it prints to the session:
 
 | Tool | Description |
 | ------ | ----------- |
-| `record_prompt` | Manually record token usage for a prompt; main path for Codex |
+| `record_prompt` | Manually record token usage for a prompt |
 | `get_usage_report` | N-day report with cache stats |
 | `get_top_expensive_prompts` | Most expensive prompts by token count |
 | `get_project_stats` | Breakdown per project |
 | `analyze_optimization` | Optimization suggestions based on usage patterns |
 | `sync_claude_stats` | Import history from `~/.claude/stats-cache.json` |
+| `sync_codex_stats` | Import history from `~/.codex/sessions/**/*.jsonl` |
+| `sync_all_stats` | Import every supported source |
 | `set_budget` | Set daily token limit |
 | `check_token_budget` | Check current usage vs budget |
 

@@ -4,7 +4,9 @@ from mcp.server.fastmcp import FastMCP
 
 from .db import DEFAULT_MODEL, init_db, get_conn, calc_cost
 from .analyzer import (
+    import_all_stats,
     import_claude_stats,
+    import_codex_stats,
     get_daily_breakdown,
     get_project_breakdown,
     get_expensive_prompts,
@@ -143,6 +145,23 @@ def sync_claude_stats() -> dict:
 
 
 @mcp.tool()
+def sync_codex_stats() -> dict:
+    """
+    Importa/sincroniza dados de ~/.codex/sessions/**/*.jsonl.
+    Execute isso para atualizar o histórico granular do Codex por workspace.
+    """
+    return import_codex_stats()
+
+
+@mcp.tool()
+def sync_all_stats() -> dict:
+    """
+    Importa/sincroniza todas as fontes locais suportadas: Claude Code e Codex.
+    """
+    return import_all_stats()
+
+
+@mcp.tool()
 def set_budget(daily_limit_tokens: int, project: str = "", alert_threshold: float = 0.8) -> dict:
     """
     Define limite diário de tokens.
@@ -178,7 +197,7 @@ def check_token_budget(project: str = "") -> dict:
 
 def main():
     init_db()
-    import_claude_stats()
+    import_all_stats()
     mcp.run()
 
 
