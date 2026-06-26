@@ -9,14 +9,44 @@ import sys
 import urllib.request
 import urllib.error
 from datetime import datetime
+import re
 
 MTU_API = os.environ.get("MTU_API_URL", "http://localhost:7799/api/record")
+DEFAULT_MODEL = os.environ.get("MTU_DEFAULT_MODEL", "gpt-5.5")
 
 
 def sanitize(text: str) -> str:
     """Remove control chars que quebram JSON."""
-    import re
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+
+
+def extract_model(payload, lines):
+    candidates = [
+        payload.get("model"),
+        payload.get("selected_model"),
+        payload.get("active_model"),
+        payload.get("model_name"),
+        payload.get("requested_model"),
+        payload.get("provider_model"),
+    ]
+
+    for line in reversed(lines):
+        msg = line.get("message", {}) if isinstance(line, dict) else {}
+        if isinstance(msg, dict) and msg.get("model"):
+            candidates.append(msg.get("model"))
+        if isinstance(line, dict) and line.get("model"):
+            candidates.append(line.get("model"))
+        meta = line.get("metadata") if isinstance(line, dict) else None
+        if isinstance(meta, dict):
+            for k in ("model", "requested_model", "active_model", "provider_model"):
+                if meta.get(k):
+                    candidates.append(meta.get(k))
+
+    for model in candidates:
+        if isinstance(model, str) and model.strip():
+            return model.strip()
+
+    return DEFAULT_MODEL
 
 
 def main():
@@ -51,7 +81,7 @@ def main():
 
     msg = last_assistant_line["message"]
     usage = msg.get("usage", {})
-    model = msg.get("model", "claude-sonnet-4-6")
+    model = extract_model(data, lines)
     assistant_uuid = last_assistant_line.get("uuid")
 
     input_tokens = usage.get("input_tokens", 0)

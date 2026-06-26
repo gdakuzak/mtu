@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
-from ..db import init_db, get_conn, calc_cost
+from ..db import DEFAULT_MODEL, init_db, get_conn, calc_cost
 from ..analyzer import (
     import_claude_stats,
     fetch_rate_limits,
@@ -114,7 +114,7 @@ class RecordRequest(BaseModel):
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_creation_tokens: int = 0
-    model: str = "claude-sonnet-4-6"
+    model: str = DEFAULT_MODEL
     timestamp: str = ""
 
 
@@ -126,8 +126,12 @@ async def dashboard():
 
 @app.post("/api/record")
 async def api_record(req: RecordRequest):
+    model = req.model.strip() if getattr(req.model, "strip", None) else DEFAULT_MODEL
+    if not model:
+        model = DEFAULT_MODEL
+
     cost = calc_cost(
-        req.model, req.input_tokens, req.output_tokens,
+        model, req.input_tokens, req.output_tokens,
         req.cache_read_tokens, req.cache_creation_tokens,
     )
     ts = req.timestamp or datetime.now().isoformat()
@@ -145,7 +149,7 @@ async def api_record(req: RecordRequest):
                 req.session_id, req.project, ts, req.prompt_preview[:2000],
                 req.input_tokens, req.output_tokens,
                 req.cache_read_tokens, req.cache_creation_tokens,
-                req.model, cost,
+                model, cost,
             ),
         )
 
@@ -368,6 +372,15 @@ async def api_prompt_projects():
             "SELECT DISTINCT project FROM prompt_logs WHERE project IS NOT NULL ORDER BY project"
         ).fetchall()
     return [r["project"] for r in rows if r["project"]]
+
+
+@app.get("/api/prompts/models")
+async def api_prompt_models():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT model FROM prompt_logs WHERE model IS NOT NULL ORDER BY model"
+        ).fetchall()
+    return [r["model"] for r in rows if r["model"]]
 
 
 PROMPTS_HTML = Path(__file__).parent / "templates" / "prompts.html"

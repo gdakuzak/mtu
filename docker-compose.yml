@@ -9,6 +9,7 @@ services:
     environment:
       - MTU_DB_PATH=/claude-data/mtu.db
       - MTU_CLAUDE_DIR=/claude-data
+      - MTU_DEFAULT_MODEL=gpt-5.5
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7799/api/stats/today')"]
@@ -22,7 +23,7 @@ services:
     ports:
       - "127.0.0.1:7800:8001"
     volumes:
-      - "${HOME}/.claude:/data:ro"
+      - "${HOME}/.claude:/data:rw"
     command: ["datasette", "/data/mtu.db", "--host", "0.0.0.0", "--port", "8001", "--setting", "sql_time_limit_ms", "5000"]
     restart: unless-stopped
     depends_on:
